@@ -1,0 +1,37 @@
+# ── 插件运行期数据（绝不入库）──────────────────────────────────
+# AstrBot 的插件数据目录在宿主侧 data/plugin_data/<plugin_name>/，
+# 这里列出的名字是万一在插件目录内产生同名文件时的兜底。
+account.json
+subscribers.json
+rules.json
+snapshot.json
+event_state.json
+events.jsonl
+data/plugin_data/
+
+# 旧项目遗留 / 手动调试用配置
+config.json
+token.txt
+runtime.json
+
+# 证书与密钥
+*.crt
+*.key
+*.pem
+
+# ── Python ────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── 编辑器 / 系统 ─────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini
