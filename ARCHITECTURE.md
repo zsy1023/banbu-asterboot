@@ -970,7 +970,7 @@ $env:BAMBU_NO_AUTOPUSH=1     # 单次提交跳过自动推送（例如临时 WIP
 | 打包 zip ≤ 16MB，且排除 `.git` / `__pycache__` / `node_modules` / 开发文件 | 全仓库约 0.2MB；`.gitignore` + `.gitattributes export-ignore` 排除 `tests/`、`tools/`、`ARCHITECTURE.md` | `test_package_under_market_limit`、`test_gitignore_keeps_runtime_data_out`、`test_gitattributes_excludes_dev_files_from_archive` |
 | `_conf_schema.json` 必须存在，配置项要有 `type` | 23 项，含 `secret: true` 的密钥字段 | `test_config_schema_is_valid_json` |
 | 国际化固定放在 `.astrbot-plugin/i18n/<locale>.json`，含 `metadata` / `config` / `views` 段 | `zh-CN.json` + `en-US.json`，覆盖全部配置项 | `test_i18n_files_in_expected_place`、`test_i18n_config_keys_exist_in_schema` |
-| Logo 建议 1:1、256×256 | `logo.png`（脚本生成，可直接替换） | — |
+| Logo 建议 1:1、256×256 | `logo.png`：32×32 像素风手绘后最近邻放大 8 倍，`tools/make_logo.py` 可复现/重画 | — |
 | 建议提供 `README`，市场页直接展示 | `README.md` 含安装/绑定/命令/配置/自检 | — |
 
 ### 19.1 本次按规范做的三处改动
@@ -996,7 +996,9 @@ $env:BAMBU_NO_AUTOPUSH=1     # 单次提交跳过自动推送（例如临时 WIP
 
 ### 19.3 发布前仍需人工确认
 
-- `logo.png` 是脚本生成的占位图标（打印机 + 竹子 + 进度条），**建议你自己再看一眼**，不合适就换掉。
+- `logo.png` 是 `tools/make_logo.py` 生成的 32×32 像素风图标（打印机 + 料盘 + 竹子 + 正在成型的层），
+  想改配色或构图直接编辑脚本里的 `PALETTE` / `draw()`，再跑 `python tools/make_logo.py` 即可；
+  `--preview` 会先打印 ASCII 网格方便确认构图。
 - 市场发布需要在 AstrBot 插件发布页注册 AstrBot Cloud 账号后提交本仓库 URL；
   `plugin_id` 将是 `zsy1023/astrbot_plugin_bambu_a1`。
 - 声明 `astrbot_version: ">=4.9.2"` 是硬门槛，低于该版本的宿主会拒绝加载（可在 WebUI 强制忽略）。
