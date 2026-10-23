@@ -1,0 +1,41 @@
+name: astrbot_plugin_bambu_a1
+display_name: 拓竹 A1 状态助手
+short_desc: 后台监控拓竹 A1，打印完成/暂停/断料第一时间推给你
+desc: |
+  在 AstrBot 里绑定拓竹（Bambu Lab）账号，插件后台盯着打印机的 MQTT 状态，
+  打印开始 / 暂停 / 断料 / 完成 / 失败 / 离线时**主动推送**消息；也能用自然语言问"现在打得怎么样"。
+
+  **主要功能**
+
+  - 三步绑定：`/banbu bind <手机号>` → `/banbu code <验证码>` → `/banbu sn <序列号>`
+  - token 与手机号经 AES-256-GCM 加密落盘，密钥掺入机器指纹，换机需重新绑定
+  - 双通道监控：MQTT 长连接优先，失败自动降级为轮询
+  - 13 种提醒规则：层数、进度、剩余时间、已打印时长、喷头/热床/腔温阈值、温度区间、HMS 故障码、余料、离线
+  - **LLM 分界线可配**：状态跃迁与硬阈值默认直推（毫秒级、零幻觉），只有完成复盘/失败诊断/小结/问答才过模型
+  - 模型补写与事实**合并成一条**消息；模型超时或超预算只发事实，告警永不丢失
+  - 协议字段外置在 `protocol_profiles/*.json`，云端改字段不用改代码，并提供 `/banbu protocol` 漂移诊断
+
+  **常用命令**：`/banbu status`、`/banbu remind add layer_reached 50`、`/banbu route list`、
+  `/banbu llm off|summary|full`、`/banbu protocol`、`/banbu test-event print_finished`
+version: 0.1.0
+author: zsy1023
+repo: https://github.com/zsy1023/banbu-asterboot
+astrbot_version: ">=4.9.2"
+social_link: https://github.com/zsy1023
+tags:
+  - bambu
+  - bambulab
+  - 3d-printing
+  - mqtt
+  - iot
+  - notification
+support_platforms:
+  - aiocqhttp
+  - telegram
+  - qq_official
+  - qq_official_webhook
+  - wecom
+  - lark
+  - dingtalk
+  - discord
+  - slack

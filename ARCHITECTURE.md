@@ -179,12 +179,18 @@ TLS    : 必须 CERT_NONE + tls_insecure_set(True)（拓竹 broker 证书链不�
 ## 4. 目录与模块职责
 
 ```
-astrbot_plugin_bambu_a1/            ← 插件目录（整体拷进 data/plugins/ 即可）
-├── metadata.yaml              # 插件元数据（name/desc/version/author/repo/astrbot_version）
+banbu-asterboot/               ← 仓库根 == 插件包根（AstrBot 只认包根下的 main.py / metadata.yaml）
+├── metadata.yaml              # 市场元数据：name/display_name/short_desc/desc/version/author/repo/
+│                              #   astrbot_version/social_link/tags/support_platforms
 ├── _conf_schema.json          # WebUI 可视化配置（第 11 节）
 ├── requirements.txt           # paho-mqtt, requests, cryptography, curl_cffi(可选)
-├── README.md                  # 安装与命令速查
+├── README.md                  # 市场首页：安装、绑定、命令、配置、自检
+├── LICENSE                    # GPL-3.0（与作者另两个仓库一致）
+├── logo.png                   # 256×256 插件图标
 ├── main.py                    # Star 子类：装配 + 命令 + LLM 工具 + 生命周期（薄）
+├── .astrbot-plugin/i18n/      # 插件国际化（宿主约定的目录名）
+│   ├── zh-CN.json
+│   └── en-US.json
 │
 ├── bambu_a1/                  # 逻辑全部在这里，可脱离 astrbot 单测
 │   ├── models.py              # Snapshot / DeviceEvent / Rule / Account / DeviceAction 数据类
@@ -212,11 +218,17 @@ astrbot_plugin_bambu_a1/            ← 插件目录（整体拷进 data/plugins
 │       ├── a1_v1.json         # 可热更新的端点/字段映射/状态码表
 │       └── dryer_v1.json      # 二期占位
 │
-└── tests/                     # 本地验证，不参与插件加载
-    ├── run_tests.py           # 入口：python tests/run_tests.py
-    ├── test_core.py           # 57 项：事件/规则/路由/合并/渲染/加密/存储
-    ├── test_plugin_smoke.py   # 25 项：用 stub 宿主验装配、绑定链路、推送链路
-    └── stubs/astrbot/         # 最小 AstrBot stub（Star/Context/filter/MessageChain）
+├── tests/                     # 本地验证，不随插件包分发（.gitattributes export-ignore）
+│   ├── run_tests.py           # 入口：python tests/run_tests.py
+│   ├── test_core.py           # 事件/规则/路由/合并/渲染/加密/存储/监控集成
+│   ├── test_plugin_smoke.py   # 用 stub 宿主验装配、绑定链路、推送链路
+│   ├── test_packaging.py      # 市场规范合规（元数据/体积/i18n/目录布局）
+│   └── stubs/astrbot/         # 最小 AstrBot stub（Star/Context/filter/MessageChain）
+│
+├── tools/                     # 开发脚本，不随插件包分发
+│   ├── install-hooks.ps1
+│   └── git-hooks/post-commit
+└── ARCHITECTURE.md            # 本文件（不随插件包分发）
 ```
 
 **为什么逻辑收进一个子包 `bambu_a1/`**：插件若把 `core.py` / `llm/` / `ui/` 直接摊在插件根目录，
@@ -845,18 +857,21 @@ class DryerEsp32Adapter(DeviceAdapter):
 
 本工作区 `E:\asterboot-bambulabMQTT` 就是插件仓库根，远端为
 `https://github.com/zsy1023/banbu-asterboot.git`（`origin`；`main` 跟踪 `origin/main`）。
-插件本体在 `astrbot_plugin_bambu_a1/`，文档与工具在根目录：
+**仓库根 == 插件包根**：`metadata.yaml`、`main.py`、`bambu_a1/` 都在根，
+这样"从仓库安装"与"市场 zip 安装"都能被宿主直接识别（宿主只在包根找 `main.py`）。
 
 ```
-asterboot-bambulabMQTT/            ← git 仓库根（origin: banbu-asterboot）
-├── .gitignore
-├── .gitattributes
-├── README.md                      # 仓库首页：这是什么、怎么用、怎么自检
-├── ARCHITECTURE.md                # 本文件
-├── tools/
-│   ├── install-hooks.ps1          # 安装/卸载"提交后自动推送"钩子
-│   └── git-hooks/post-commit
-└── astrbot_plugin_bambu_a1/       # 插件目录（整体拷到 AstrBot/data/plugins/ 即可用）
+banbu-asterboot/                   ← git 仓库根 = 插件包根
+├── .gitignore / .gitattributes
+├── metadata.yaml                  # 市场元数据（author/name 即 plugin_id）
+├── main.py                        # 插件入口
+├── bambu_a1/                      # 逻辑包
+├── README.md                      # 市场首页
+├── ARCHITECTURE.md                # 本文件（export-ignore，不随包分发）
+├── LICENSE / logo.png
+├── .astrbot-plugin/i18n/          # 插件国际化
+├── tests/                         # export-ignore
+└── tools/                         # export-ignore
 ```
 
 ### 17.2 提交规范
@@ -909,7 +924,7 @@ $env:BAMBU_NO_AUTOPUSH=1     # 单次提交跳过自动推送（例如临时 WIP
 
 ## 18. 实现状态
 
-### 18.1 已实现（本地 97 项测试全绿）
+### 18.1 已实现（本地 115 项测试全绿）
 
 | 里程碑 | 内容 | 验证方式 |
 |---|---|---|
@@ -929,3 +944,48 @@ $env:BAMBU_NO_AUTOPUSH=1     # 单次提交跳过自动推送（例如临时 WIP
 - **周期摘要**：保留了 `task_summary` / `periodic_digest` 事件类型与 `llm_route` 位，
   自动定时生成尚未接线（当前用 `/banbu digest` 手动触发），避免默认就产生周期性模型调用。
 - **多打印机**：数据模型带 `device` 字段，注册表支持多适配器；当前只实例化单台 A1。
+
+---
+
+## 19. AstrBot 插件规范合规
+
+依据（均为官方一手材料）：`docs.astrbot.app/dev/star/plugin-new.html`、`plugin-publish.html`、
+`plugin-i18n.html`、插件市场 JSON 规范 `2026-06-27`，以及宿主加载器源码
+`astrbot/core/star/updater.py`（`PLUGIN_METADATA_REQUIRED_FIELDS`、`inspect_plugin_directory`）
+与 `astrbot/core/star/star_manager.py`（`_get_modules`、`_load_plugin_metadata`、`_load_plugin_i18n`）。
+
+下面每条都有对应的自动化断言（`tests/test_packaging.py`），提交前跑一次就知道有没有违规。
+
+| 规范要求 | 我们的做法 | 断言 |
+|---|---|---|
+| 包根必须有 `main.py` 或 `<dirname>.py` | 仓库根平铺 `main.py` | `test_required_files_at_repo_root`、`test_no_extra_package_level_nesting` |
+| 插件类必须继承 `Star` | `class BambuA1Plugin(Star)` | `test_main_defines_star_subclass` |
+| `metadata.yaml` 必需字段 `name/desc/version/author`，且为非空字符串 | 全部齐备 | `test_required_fields_non_empty_strings` |
+| `metadata.yaml` ≤ 1MB | 1.8KB | `test_metadata_size_limit` |
+| `version` 语义化版本、**不带 `v` 前缀**；市场记录必须与之一致 | `0.1.0`（早期写成 `v0.1.0`，已修正） | `test_version_is_semver_without_v_prefix` |
+| `repo` 必须是 `https://github.com/{owner}/{repo}`（非 SSH/非子目录/非 release） | `https://github.com/zsy1023/banbu-asterboot`（早期指向不存在的 `astrbot_plugin_bambu_a1`，已修正） | `test_repo_is_github_repo_url`、`test_repo_matches_current_git_remote` |
+| `author` + `name` 构成 `plugin_id`，`name` 全小写、`astrbot_plugin_` 前缀、无空格与斜杠 | `zsy1023/astrbot_plugin_bambu_a1` | `test_name_follows_plugin_naming` |
+| `astrbot_version` 必须是合法 PEP 440 表达式（非法会阻止加载） | `">=4.9.2"` | `test_astrbot_version_is_valid_specifier` |
+| `support_platforms` 只能填 `ADAPTER_NAME_2_TYPE` 的 key | 9 个已验证 key（早期多写了一个 `webchat`，已删） | `test_support_platforms_are_known_keys` |
+| 打包 zip ≤ 16MB，且排除 `.git` / `__pycache__` / `node_modules` / 开发文件 | 全仓库约 0.2MB；`.gitignore` + `.gitattributes export-ignore` 排除 `tests/`、`tools/`、`ARCHITECTURE.md` | `test_package_under_market_limit`、`test_gitignore_keeps_runtime_data_out`、`test_gitattributes_excludes_dev_files_from_archive` |
+| `_conf_schema.json` 必须存在，配置项要有 `type` | 23 项，含 `secret: true` 的密钥字段 | `test_config_schema_is_valid_json` |
+| 国际化固定放在 `.astrbot-plugin/i18n/<locale>.json`，含 `metadata` / `config` / `views` 段 | `zh-CN.json` + `en-US.json`，覆盖全部配置项 | `test_i18n_files_in_expected_place`、`test_i18n_config_keys_exist_in_schema` |
+| Logo 建议 1:1、256×256 | `logo.png`（脚本生成，可直接替换） | — |
+| 建议提供 `README`，市场页直接展示 | `README.md` 含安装/绑定/命令/配置/自检 | — |
+
+### 19.1 本次按规范做的三处改动
+
+1. **目录重构**：`astrbot_plugin_bambu_a1/` 下的内容全部上移到仓库根。
+   原因：宿主的 `_get_modules()` 只在"被克隆的目录根"里找 `main.py`，旧布局会导致
+   "从仓库安装"装出一个空插件（日志 `has neither main.py nor ...`）。
+2. **`metadata.yaml` 修正**：`version` 去掉 `v`；`repo` 指向真实的 `banbu-asterboot`；
+   补 `tags` / `social_link`；`desc` 改为多行 Markdown（市场页会渲染）。
+3. **`support_platforms` 去掉 `webchat`**：它不在官方允许的适配器 key 列表里，
+   留着只会在 WebUI 里显示成未知平台。实际能力不受影响。
+
+### 19.2 发布前仍需人工确认
+
+- `logo.png` 是脚本生成的占位图标（打印机 + 竹子 + 进度条），**建议你自己再看一眼**，不合适就换掉。
+- 市场发布需要在 AstrBot 插件发布页注册 AstrBot Cloud 账号后提交本仓库 URL；
+  `plugin_id` 将是 `zsy1023/astrbot_plugin_bambu_a1`。
+- 声明 `astrbot_version: ">=4.9.2"` 是硬门槛，低于该版本的宿主会拒绝加载（可在 WebUI 强制忽略）。

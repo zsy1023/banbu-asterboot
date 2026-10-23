@@ -10,3 +10,11 @@
 *.jpeg binary
 *.gif binary
 *.zip binary
+
+# 插件市场按仓库 zip 分发（16MB 上限），开发用文件不随包发出
+/tests export-ignore
+/tools export-ignore
+/ARCHITECTURE.md export-ignore
+/PLUGIN_USAGE.md export-ignore
+/.github export-ignore
+/.gitignore export-ignore

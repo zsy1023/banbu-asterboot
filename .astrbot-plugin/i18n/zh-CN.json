@@ -1,0 +1,99 @@
+{
+  "metadata": {
+    "display_name": "拓竹 A1 状态助手",
+    "short_desc": "后台监控拓竹 A1，打印完成/暂停/断料第一时间推给你",
+    "desc": "绑定拓竹账号后，插件在后台监控打印机 MQTT 状态，打印开始、暂停、断料、完成、失败、离线时主动推送消息；也支持自然语言查询与提醒规则。关键告警不经过大模型直推，只有复盘、诊断、小结和问答才使用模型。"
+  },
+  "config": {
+    "enabled": {
+      "description": "插件总开关"
+    },
+    "region": {
+      "description": "拓竹账号区域",
+      "labels": ["中国区 (bambulab.cn)", "国际区 (bambulab.com)"],
+      "hint": "收码区域与登录区域必须一致，否则验证码会被判为不存在。"
+    },
+    "protocol_profile": {
+      "description": "协议档案",
+      "hint": "云端改字段时优先换档案，不用改代码。"
+    },
+    "protocol_overrides": {
+      "description": "协议档案覆盖",
+      "hint": "深合并到档案，用于云端临时改名时打补丁。"
+    },
+    "serial": {
+      "description": "打印机序列号",
+      "hint": "也可以聊天里发送 /banbu sn <序列号>。"
+    },
+    "secret_key": {
+      "description": "凭据主密钥",
+      "hint": "留空则首次绑定时自动生成。它参与密钥派生，修改后需要重新绑定。"
+    },
+    "monitor_mode": {
+      "description": "监控通道",
+      "labels": ["自动（长连接优先，失败降级轮询）", "长连接（低延迟）", "轮询（最稳）"]
+    },
+    "poll_interval": {
+      "description": "轮询间隔（秒）"
+    },
+    "stale_after": {
+      "description": "无报文判离线（秒）"
+    },
+    "auto_start": {
+      "description": "启动时自动开始监控"
+    },
+    "push_targets": {
+      "description": "额外推送目标",
+      "hint": "默认推给绑定会话，一般不用填。"
+    },
+    "quiet_hours_enabled": {
+      "description": "启用安静时段",
+      "hint": "开启后安静时段内只推送 critical 事件。"
+    },
+    "quiet_hours": {
+      "description": "安静时段区间"
+    },
+    "progress_milestones": {
+      "description": "进度里程碑（%）"
+    },
+    "merge_window_s": {
+      "description": "合并窗口（秒）",
+      "hint": "窗口内的事件与模型解释会合成一条消息发出；0 表示逐条即时发送。"
+    },
+    "merge_critical_window_s": {
+      "description": "critical 事件合并窗口（秒）"
+    },
+    "llm_mode": {
+      "description": "LLM 总闸",
+      "labels": ["关闭（全部模板直推）", "仅复盘与问答", "完整（含诊断与摘要）"]
+    },
+    "llm_route": {
+      "description": "LLM 分界线",
+      "hint": "事件 → direct/llm/both。留空则用内置默认值。"
+    },
+    "llm_provider_id": {
+      "description": "LLM 供应商",
+      "hint": "留空使用当前会话默认供应商。"
+    },
+    "llm_timeout": {
+      "description": "LLM 超时（秒）"
+    },
+    "llm_budget_per_hour": {
+      "description": "LLM 每小时调用上限",
+      "hint": "超出后本次事件退回模板直推，不影响告警送达。"
+    },
+    "mqtt_timeout": {
+      "description": "MQTT 单次超时（秒）"
+    },
+    "mqtt_retries": {
+      "description": "MQTT 失败重试次数"
+    },
+    "log_level": {
+      "description": "日志级别"
+    },
+    "dryer": {
+      "description": "烘干箱（二期）",
+      "hint": "本期未实现，仅保留接口与配置位。"
+    }
+  }
+}

@@ -1,0 +1,99 @@
+{
+  "metadata": {
+    "display_name": "Bambu A1 Status Assistant",
+    "short_desc": "Watches your Bambu A1 in the background and pushes completion / pause / runout alerts",
+    "desc": "Bind your Bambu Lab account and the plugin keeps watching the printer over MQTT. It pushes print started / paused / filament runout / finished / failed / offline events, and answers questions in natural language. Critical alerts never go through the LLM; only recaps, diagnosis, digests and Q&A do."
+  },
+  "config": {
+    "enabled": {
+      "description": "Enable plugin"
+    },
+    "region": {
+      "description": "Bambu account region",
+      "labels": ["China (bambulab.cn)", "Global (bambulab.com)"],
+      "hint": "The region used for the SMS code and for login must match, otherwise the code is rejected."
+    },
+    "protocol_profile": {
+      "description": "Protocol profile",
+      "hint": "Switch profile instead of editing code when the cloud renames fields."
+    },
+    "protocol_overrides": {
+      "description": "Protocol overrides",
+      "hint": "Deep-merged into the profile; use it to patch a temporary cloud rename."
+    },
+    "serial": {
+      "description": "Printer serial",
+      "hint": "You can also run /banbu sn <serial> in chat."
+    },
+    "secret_key": {
+      "description": "Master key for stored credentials",
+      "hint": "Generated on first bind if empty. Changing it requires rebinding."
+    },
+    "monitor_mode": {
+      "description": "Monitoring channel",
+      "labels": ["Auto (stream first, fall back to polling)", "Stream (low latency)", "Poll (most robust)"]
+    },
+    "poll_interval": {
+      "description": "Poll interval (seconds)"
+    },
+    "stale_after": {
+      "description": "Mark offline after N seconds without data"
+    },
+    "auto_start": {
+      "description": "Start monitoring on plugin load"
+    },
+    "push_targets": {
+      "description": "Extra push targets",
+      "hint": "By default messages go to the session that bound the account."
+    },
+    "quiet_hours_enabled": {
+      "description": "Enable quiet hours",
+      "hint": "During quiet hours only critical events are pushed."
+    },
+    "quiet_hours": {
+      "description": "Quiet hours range"
+    },
+    "progress_milestones": {
+      "description": "Progress milestones (%)"
+    },
+    "merge_window_s": {
+      "description": "Merge window (seconds)",
+      "hint": "Events and the model draft inside the window are merged into one message; 0 disables merging."
+    },
+    "merge_critical_window_s": {
+      "description": "Merge window for critical events (seconds)"
+    },
+    "llm_mode": {
+      "description": "LLM master switch",
+      "labels": ["Off (template only)", "Recap and Q&A only", "Full (with diagnosis and digests)"]
+    },
+    "llm_route": {
+      "description": "LLM boundary",
+      "hint": "Event -> direct/llm/both. Empty means built-in defaults."
+    },
+    "llm_provider_id": {
+      "description": "LLM provider",
+      "hint": "Empty uses the session default provider."
+    },
+    "llm_timeout": {
+      "description": "LLM timeout (seconds)"
+    },
+    "llm_budget_per_hour": {
+      "description": "LLM calls per hour",
+      "hint": "When exceeded the event falls back to the template, alerts are still delivered."
+    },
+    "mqtt_timeout": {
+      "description": "MQTT timeout (seconds)"
+    },
+    "mqtt_retries": {
+      "description": "MQTT retries"
+    },
+    "log_level": {
+      "description": "Log level"
+    },
+    "dryer": {
+      "description": "Filament dryer (phase 2)",
+      "hint": "Not implemented yet; interface and config placeholders only."
+    }
+  }
+}
