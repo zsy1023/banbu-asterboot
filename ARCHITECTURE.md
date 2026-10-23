@@ -983,7 +983,18 @@ $env:BAMBU_NO_AUTOPUSH=1     # 单次提交跳过自动推送（例如临时 WIP
 3. **`support_platforms` 去掉 `webchat`**：它不在官方允许的适配器 key 列表里，
    留着只会在 WebUI 里显示成未知平台。实际能力不受影响。
 
-### 19.2 发布前仍需人工确认
+### 19.2 打包实测
+
+`git archive --format=zip HEAD`（等价于市场下载的仓库 zip，只少了 GitHub 的顶层目录前缀）：
+
+| 指标 | 结果 |
+|---|---|
+| 体积 | 约 90 KB（上限 16 MB） |
+| 文件数 | 39 |
+| 包根内容 | `metadata.yaml`、`main.py`、`_conf_schema.json`、`requirements.txt`、`bambu_a1/`、`.astrbot-plugin/`、`README.md`、`LICENSE`、`logo.png` |
+| 已排除 | `tests/`、`tools/`、`ARCHITECTURE.md`（`.gitattributes` 的 `export-ignore` 生效） |
+
+### 19.3 发布前仍需人工确认
 
 - `logo.png` 是脚本生成的占位图标（打印机 + 竹子 + 进度条），**建议你自己再看一眼**，不合适就换掉。
 - 市场发布需要在 AstrBot 插件发布页注册 AstrBot Cloud 账号后提交本仓库 URL；
