@@ -339,8 +339,12 @@ DeviceEvent[] ─► 去重(dedup_key) ─► 路由(rule > llm_route > 默认) 
                                        context.send_message(umo, chain)   ← 一条消息
 ```
 
-- 推送目标：`subscribers.json` 里的 `umo` 列表（绑定时的会话自动加入）；支持多会话（私聊 + 群）。
-- 每订阅者可设：`events`（订阅哪些类型）、`quiet_hours`（安静时段只放 `critical`）、`format`（`text` | `image`）。
+- **推送目标 = 谁绑定就推给谁**：`/banbu bind` 成功时把当前会话的 `event.unified_msg_origin` 写入
+  `subscribers.json`；之后所有推送发给这些 umo。不做群白名单、不做跨会话转发。
+  想在另一个会话也收，就在那个会话里 `/banbu subscribe`（同一账号多会话 = 多条记录）。
+- 每订阅者可设：`events`（订阅哪些类型）、`quiet_hours`（**可选项**，关闭/留空即不生效）。
+- 消息形态**固定纯文本**（跨平台最稳，不受图片渲染依赖影响）；将来若要文转图，用
+  `on_before_send` 钩子在消息链上换实现，核心与路由都不用改。
 - 投递失败（平台不支持主动消息）→ 记 warning 并写 `events.jsonl`，不重试轰炸；`/banbu test-event` 可手动验证链路。
 - 消息长度：单条超平台上限时按事件拆分，不截断关键数值。
 - 合并/路由的细节见第 6.3 / 6.4 节；`ui/push.py` 只负责"拿到已经决定好的消息链并投递"，不做路由判断。
@@ -534,7 +538,7 @@ DeviceEvent[] ─► 去重(dedup_key) ─► 路由(rule > llm_route > 默认) 
 | `/banbu status` | 当前状态卡（进度/层/温度/剩余/AMS） | ✅ |
 | `/banbu monitor on\|off\|auto` | 后台监控开关/模式 | ✅ |
 | `/banbu remind add <type> <value> [--llm]` / `list` / `del <id>` / `clear` | 提醒规则 | ✅ |
-| `/banbu quiet <HH:MM-HH:MM>` | 安静时段 | ✅ |
+| `/banbu quiet on\|off` / `quiet <HH:MM-HH:MM>` | 安静时段（可选项，默认关闭） | ✅ |
 | `/banbu subscribe` / `unsubscribe` | 本会话加入/退出推送 | ✅ |
 | `/banbu llm off\|summary\|full` | LLM 总闸 | ✅ |
 | `/banbu route list` / `route set <event> <direct\|llm\|both>` | **分界线逐项调整** | ✅ |
@@ -698,7 +702,8 @@ class DryerEsp32Adapter(DeviceAdapter):
   ① 二期在插件内起一个只监听内网的 aiohttp 服务（`ws_url` 配置项，端口可配，默认关闭）；
   ② 若设备只支持"我连它"，则走 `PushSource.stream()`，插件作为客户端去连。
   本期不选型，但 `hooks.on_snapshot` 已经能接受外部注入的快照，两条路都不用改核心。
-- 预留联动钩子语义：A1 `print_finished` → `on_events` 里可发"要不要顺手烘干耗材？"，二期由烘干箱适配器消费。
+- 预留联动钩子语义：A1 `print_finished` → `on_events` 里可发"要不要顺手烘干耗材？"；
+  是否先询问由配置项 `dryer.require_confirm` 决定（默认 true = 询问 + 二次确认，false = 按规则直接开始），二期由烘干箱适配器消费。
 
 ---
 
@@ -716,8 +721,9 @@ class DryerEsp32Adapter(DeviceAdapter):
 | 监控 | `poll_interval` | int | 30 | 秒 |
 | 监控 | `stale_after` | int | 90 | 秒，无报文判离线 |
 | 监控 | `auto_start` | bool | true | 启动即监控 |
-| 推送 | `push_targets` | list | `[]` | 额外 umo（一般由 `/banbu subscribe` 维护） |
-| 推送 | `quiet_hours` | string | `23:00-07:30` | 安静时段 |
+| 推送 | `push_targets` | list | `[]` | 额外 umo；默认推送目标就是**绑定会话**，此项一般不用手填 |
+| 推送 | `quiet_hours_enabled` | bool | false | 安静时段**总开关**，关掉则完全不生效 |
+| 推送 | `quiet_hours` | string | `23:00-07:30` | 安静时段区间（仅在上项为 true 时生效）；期间只放 `critical` |
 | 推送 | `progress_milestones` | list | `[25,50,75,90]` | 进度里程碑 |
 | 推送 | `merge_window_s` | int | 3 | 合并窗口（0 = 关闭合并，逐条即时发） |
 | 推送 | `merge_critical_window_s` | int | 0.8 | `critical` 事件专用窗口（更短） |
@@ -729,6 +735,8 @@ class DryerEsp32Adapter(DeviceAdapter):
 | 高级 | `mqtt_timeout` | int | 15 | 秒 |
 | 高级 | `mqtt_retries` | int | 2 | 次 |
 | 高级 | `log_level` | string | `INFO` | |
+| 二期 | `dryer.require_confirm` | bool | true | 烘干箱联动是否需二次确认（false = 按规则全自动） |
+| 二期 | `dryer.ws_url` | string | `""` | 烘干箱 WebSocket 地址（方向待二期定，先留位） |
 
 ---
 
@@ -809,20 +817,18 @@ class DryerEsp32Adapter(DeviceAdapter):
 | **烘干箱推模式** | 二期用 **WebSocket 长连接被动推送**，故适配器抽象成 `PollSource` + `PushSource` 两种源；本期只定接口不实现 | 第 2.6 / 10.2 节 |
 | 凭据加密 | AES-256-GCM + **机器绑定盐**（hostname+MAC+实例 ID）；无 `cryptography` 拒绝绑定。代价：**换机器/迁移需重新 `/banbu bind`** | 第 5.2 节 |
 | 绑定入口 | 手机号/验证码只走 `/banbu` 命令，不进 LLM 上下文与日志 | 第 5.1 / 8.2 节 |
+| **状态卡形态** | **纯文本**（跨平台最稳），不做文转图；将来要图可由 `on_before_send` 钩子外挂，不用改核心 | 第 5.5 / 8.1 节 |
+| **推送目标** | **谁绑定就推给谁**：绑定/订阅时记录 `umo`，推送到这些会话；不做群白名单、不做跨会话转发 | 第 5.5 节 |
+| **安静时段** | 是**设置里的可选项**：`quiet_hours` 留空 / 关闭即完全不生效；开启时只放 `critical`，其余静默累计 | 第 11 节 |
+| **烘干箱二次确认** | 也做成**设置项**（二期 `dryer.require_confirm`，默认开），用户可关掉改成全自动 | 第 10.2 / 11 节 |
 
 > 即时生效的实现细节：`main.py` 持有 `config` 引用，`router` / `bridge` 每次使用前读
 > `self.config.get(...)`，**不缓存到实例属性**；配置热更新由 AstrBot 负责写回 JSON。
 
-### 16.2 仍想听你意见（不阻塞 M1–M3）
+### 16.2 仍想听你意见
 
-1. **状态卡形态**：纯文本（跨平台最稳）还是也做文转图（AstrBot 有 `t2i`，会引入图片渲染依赖）？
-   建议先文本，图片作为可选项后加。
-2. **推送目标**：绑定会话自动订阅（当前设计）是否够用？是否需要"只推指定群"的白名单模式？
-3. **安静时段策略**：`23:00-07:30` 期间只放 `critical`（失败/断料/离线），完成与里程碑静默累计到次日首条消息——这个合并策略可以接受吗？
-4. **烘干箱联动方式**：A1 打印完成后主动问"要不要开始烘干"（询问式，需二次确认），还是按规则自动开始？
-   涉及加热设备，我倾向询问式。
-5. **烘干箱 WebSocket 的方向**：是设备去连一个"我们提供的 ws 地址"（插件内起 aiohttp 监听），
-   还是插件作为客户端去连设备？（两种 `PushSource` 都支持，选型影响二期配置项设计）
+暂无。评审阶段的分叉已全部收敛；实现过程中若遇到新的真分叉（例如云端接口实际行为与档案不符、
+或 WS 方向必须二选一），会在对应里程碑开工前单独问一次，不擅自替你决定。
 
 ---
 
