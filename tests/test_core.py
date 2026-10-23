@@ -201,11 +201,56 @@ class TestEventDetect(unittest.TestCase):
         self.assertEqual(events[0].data["codes"], ["03004002"])
         self.assertEqual(events[0].severity, "critical")
 
+    def test_hms_not_reported_on_first_poll(self):
+        """绑定时机器上已有故障码，不应被当成"刚发生"而报一次故障。"""
+        cur = snap_from(self.profile, hms=[{"code": "03004002"}])
+        self.assertEqual(
+            [e for e in self._detect(None, cur, first_poll=True) if e.type == EV_HMS_ERROR], []
+        )
+        # 没传 first_poll 但也没有 prev 时同样不报
+        self.assertEqual([e for e in self._detect(None, cur) if e.type == EV_HMS_ERROR], [])
+
     def test_milestone_crossing(self):
         prev = snap_from(self.profile, mc_percent=40)
         cur = snap_from(self.profile, mc_percent=52)
         events = [e for e in self._detect(prev, cur, milestones=[25, 50, 75]) if e.type == EV_MILESTONE]
         self.assertEqual([e.data["percent"] for e in events], [50])
+
+    def test_no_milestones_on_first_poll(self):
+        """绑定后的首轮只是建基线：机器正好停在 100% 时不能喷出 25/50/75/90。"""
+        cur = snap_from(self.profile, mc_percent=100)
+        events = self._detect(None, cur, milestones=[25, 50, 75, 90], first_poll=True)
+        self.assertEqual([e for e in events if e.type == EV_MILESTONE], [])
+
+        # 即使调用方忘了传 first_poll，只要没有 prev 也不该报
+        events = self._detect(None, cur, milestones=[25, 50, 75, 90])
+        self.assertEqual([e for e in events if e.type == EV_MILESTONE], [])
+
+    def test_no_milestones_when_not_printing(self):
+        """已 FINISH / PAUSE / IDLE 时跨过阈值没有意义（截图里那 4 条假进度）。"""
+        prev = snap_from(self.profile, gcode_state="FINISH", mc_percent=90)
+        cur = snap_from(self.profile, gcode_state="FINISH", mc_percent=100)
+        self.assertEqual(
+            [e for e in self._detect(prev, cur, milestones=[25, 50, 75, 90]) if e.type == EV_MILESTONE],
+            [],
+        )
+        # 暂停中也不报
+        prev = snap_from(self.profile, gcode_state="PAUSE", mc_percent=40)
+        cur = snap_from(self.profile, gcode_state="PAUSE", mc_percent=60)
+        self.assertEqual(
+            [e for e in self._detect(prev, cur, milestones=[50]) if e.type == EV_MILESTONE],
+            [],
+        )
+
+    def test_milestone_needs_known_previous_percent(self):
+        """prev 的进度未知时无法判断"刚跨过"，宁可不报。"""
+        prev = self.profile.to_snapshot({"print": {"gcode_state": "RUNNING", "task_id": "t1"}})
+        cur = snap_from(self.profile, mc_percent=60)
+        self.assertIsNone(prev.percent)
+        self.assertEqual(
+            [e for e in self._detect(prev, cur, milestones=[50]) if e.type == EV_MILESTONE],
+            [],
+        )
 
     def test_no_events_when_state_unchanged(self):
         prev = snap_from(self.profile)
@@ -567,20 +612,34 @@ class TestMonitorIntegration(unittest.IsolatedAsyncioTestCase):
         await self._push(gcode_state="RUNNING", mc_percent=5, layer_num=10)
         self.assertIn(EV_PRINT_STARTED, self._types())
 
+        # 里程碑只在"正在打印"且跨过阈值时触发
+        await self._push(gcode_state="RUNNING", mc_percent=52, layer_num=120)
+        self.assertIn(EV_MILESTONE, self._types(), "打印中跨过 50% 应有里程碑")
+
         await self._push(gcode_state="PAUSE", mc_percent=52, layer_num=120, stg_cur=16)
         self.assertIn(EV_PRINT_PAUSED, self._types())
-        self.assertIn(EV_MILESTONE, self._types(), "跨过 50% 应有里程碑")
 
         await self._push(gcode_state="RUNNING", mc_percent=52, layer_num=121)
         self.assertIn("print_resumed", self._types())
 
         await self._push(gcode_state="FINISH", mc_percent=100, layer_num=240)
         self.assertIn(EV_PRINT_FINISHED, self._types())
+        # FINISH 时剩余时间归零，渲染层不应出现"剩 0 分钟"
+        milestone_texts = [
+            render.render_event(e) for e in self.events if e.type == EV_MILESTONE
+        ]
+        self.assertTrue(milestone_texts)
+        self.assertNotIn("剩余：0 分钟", " ".join(milestone_texts))
 
         # 同一状态重复上报不应重复触发
         before = len(self.events)
         await self._push(gcode_state="FINISH", mc_percent=100, layer_num=240)
         self.assertEqual(len(self.events), before)
+
+    async def test_binding_while_finished_emits_nothing(self):
+        """截图里的事故复现：机器停在 100% 时绑定，首轮不能喷出 4 条假进度。"""
+        await self._push(gcode_state="FINISH", mc_percent=100, layer_num=240)
+        self.assertEqual(self.events, [], "首轮基线不应产生任何事件")
 
     async def test_offline_detected_after_silence(self):
         await self._push(gcode_state="RUNNING")

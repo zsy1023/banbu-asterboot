@@ -145,9 +145,10 @@ def detect(
         ))
 
     # ── 故障码新增 ──────────────────────────────────────────
+    # 首轮基线不能把"机器上已经存在的故障码"当成刚发生（否则绑定时就报一次故障）
     cur_codes = _hms_codes(cur)
     prev_codes = _hms_codes(prev) if prev else set()
-    new_codes = sorted(cur_codes - prev_codes)
+    new_codes = sorted(cur_codes - prev_codes) if (prev is not None and not first_poll) else []
     if new_codes:
         push(DeviceEvent(
             type=EV_HMS_ERROR,
@@ -158,8 +159,20 @@ def detect(
         ))
 
     # ── 进度里程碑 ──────────────────────────────────────────
-    if milestones and cur.percent is not None:
-        prev_percent = prev.percent if prev and prev.percent is not None else 0
+    # 三个前提，缺一不可：
+    #   1. 必须正在打印 —— 已经 FINISH / PAUSE / IDLE 时"跨过 25%"没有意义，
+    #      否则绑定时机器正好停在 100%，会一次性喷出 25/50/75/90 四条假进度；
+    #   2. 必须是增量比较（prev 存在且 percent 已知）—— 首轮基线不能算"刚跨过"；
+    #   3. first_poll 期间一律不报。
+    if (
+        milestones
+        and cur.percent is not None
+        and cur.state == "printing"
+        and not first_poll
+        and prev is not None
+        and prev.percent is not None
+    ):
+        prev_percent = prev.percent
         for mark in sorted(set(milestones)):
             if prev_percent < mark <= cur.percent:
                 push(DeviceEvent(

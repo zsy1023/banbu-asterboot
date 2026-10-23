@@ -13,7 +13,7 @@
     <img src="https://img.shields.io/badge/AstrBot-Plugin-blue?style=flat-square" alt="AstrBot">
   </a>
   <img src="https://img.shields.io/badge/AstrBot-%3E%3D4.9.2-lightgrey?style=flat-square" alt="AstrBot Version">
-  <img src="https://img.shields.io/badge/version-0.1.3-green?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.1.4-green?style=flat-square" alt="Version">
   <a href="./LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0-green?style=flat-square" alt="License">
   </a>

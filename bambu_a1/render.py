@@ -93,9 +93,10 @@ def render_status(snap: Snapshot, *, state_age_s: int | None = None, device_name
         lines.append(f"层次：{snap.layer}{total}")
 
     time_bits = []
-    if snap.elapsed_min is not None:
+    # 0 / 负数没有信息量：FINISH 时 mc_remaining_time 就是 0，显示"剩 0 分钟"会误导
+    if snap.elapsed_min and snap.elapsed_min > 0:
         time_bits.append(f"已 {fmt_minutes(snap.elapsed_min)}")
-    if snap.remaining_min is not None:
+    if snap.remaining_min and snap.remaining_min > 0:
         time_bits.append(f"剩 {fmt_minutes(snap.remaining_min)}")
     if time_bits:
         lines.append("时间：" + " · ".join(time_bits))
@@ -218,8 +219,11 @@ def render_event(event: DeviceEvent, *, device_name: str = "拓竹 A1") -> str:
         if data.get("layer"):
             total = f"/{data['total_layers']}" if data.get("total_layers") else ""
             lines.append(f"层次：{data['layer']}{total}")
-        if data.get("remaining_min") is not None:
-            lines.append(f"剩余：{fmt_minutes(data['remaining_min'])}")
+        remaining = data.get("remaining_min")
+        if isinstance(remaining, (int, float)) and remaining > 0:
+            lines.append(f"剩余：{fmt_minutes(remaining)}")
+        if data.get("task_name"):
+            lines.append(f"任务：{data['task_name']}")
         return "\n".join(lines)
 
     if event.type == EV_RULE_HIT:
