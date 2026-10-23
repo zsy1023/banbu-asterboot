@@ -179,44 +179,51 @@ TLS    : 必须 CERT_NONE + tls_insecure_set(True)（拓竹 broker 证书链不�
 ## 4. 目录与模块职责
 
 ```
-astrbot_plugin_bambu_a1/
+astrbot_plugin_bambu_a1/            ← 插件目录（整体拷进 data/plugins/ 即可）
 ├── metadata.yaml              # 插件元数据（name/desc/version/author/repo/astrbot_version）
 ├── _conf_schema.json          # WebUI 可视化配置（第 11 节）
 ├── requirements.txt           # paho-mqtt, requests, cryptography, curl_cffi(可选)
-├── main.py                    # Star 子类：装配、命令/工具注册、启动后台任务、terminate
+├── README.md                  # 安装与命令速查
+├── main.py                    # Star 子类：装配 + 命令 + LLM 工具 + 生命周期（薄）
 │
-├── core/
-│   ├── models.py              # Snapshot / DeviceEvent / Rule / Account 数据类（全部 dataclass + to_dict）
-│   ├── credentials.py         # 手机号/序列号/token 的加密落盘与读取（AES-GCM）
-│   ├── auth.py                # 发码 / 登录 / 校验 token / 换 uid，端点全部来自 compat
-│   ├── mqtt.py                # 一次性快照 + 长连接两条通道，阻塞调用打包成 async
-│   ├── monitor.py             # 后台循环：拉取→合并→detect→分发；断线重连、退避、静默检测
-│   ├── events.py              # 跃迁/阈值/字段变化检测 + 去重（等价于原 EventEngine，可单测）
-│   ├── rules.py               # 用户自定义提醒规则引擎（第 7 节）
-│   ├── store.py               # 原子写 JSON（tmp+rename）、轮转 jsonl、并发锁
-│   └── compat.py              # 协议档案：端点表 / 字段映射 / 状态映射 / 漂移检测
+├── bambu_a1/                  # 逻辑全部在这里，可脱离 astrbot 单测
+│   ├── models.py              # Snapshot / DeviceEvent / Rule / Account / DeviceAction 数据类
+│   ├── store.py               # 原子写 JSON（tmp+replace）、轮转 jsonl、锁
+│   ├── compat.py              # 协议档案：端点表 / 字段映射 / 状态映射 / 漂移统计
+│   ├── credentials.py         # AES-256-GCM + 机器绑定盐，密钥派生与掩码
+│   ├── auth.py                # 发码 / 登录 / 换 uid / 列举设备（端点全来自档案）
+│   ├── mqtt.py                # poll 单次取全量 + stream 长连接增量（paho 阻塞调用进线程）
+│   ├── monitor.py             # 后台循环：拉取→合并→detect→分发；auto 降级、退避、静默判离线
+│   ├── events.py              # 跃迁/故障码/断料/里程碑/离线检测 + 去重（EventState 持久化）
+│   ├── rules.py               # 13 种提醒规则类型 + 校验 + 持久化
+│   ├── hooks.py               # 8 个扩展点的钩子总线（异常隔离）
+│   ├── router.py              # 分界线：rule > llm_route > 默认，受 llm_mode 总闸约束
+│   ├── coalescer.py           # 合并窗口：事实 + 模型补写合成一条，超窗先发事实
+│   ├── render.py              # 确定性文本渲染（状态卡、各事件文案、规则列表）
+│   ├── push.py                # 订阅者清单 + 安静时段 + context.send_message
+│   ├── prompts.py             # 系统提示词、防编造约束、事实注入模板
+│   ├── bridge.py              # llm_generate 封装：超时/预算/降级/供应商选择
+│   ├── tools.py               # 自然语言入口的实现（被 main 的 llm_tool 薄封装调用）
+│   ├── adapters/
+│   │   ├── base.py            # DeviceAdapter + PollSource/PushSource + 注册表
+│   │   ├── bambu_a1.py        # 拓竹 A1（本期实现）
+│   │   └── dryer_esp32.py     # 烘干箱骨架（available=False，调用明确报"未实现"）
+│   └── protocol_profiles/
+│       ├── a1_v1.json         # 可热更新的端点/字段映射/状态码表
+│       └── dryer_v1.json      # 二期占位
 │
-├── adapters/
-│   ├── base.py                # DeviceAdapter 抽象基类 + register/get 注册表
-│   ├── bambu_a1.py            # 拓竹 A1 实现（本期）
-│   └── dryer_esp32.py         # 烘干箱骨架（raise NotImplementedError + TODO 清单）
-│
-├── ui/
-│   ├── render.py              # 确定性文本渲染（进度条、温度、耗时、AMS），无 LLM
-│   ├── router.py              # 分界线：rule > llm_route > 默认，产出 event.channel（第 6.3 节）
-│   ├── coalescer.py           # 合并窗口：事实块 + 模型解释块合成一条（第 6.4 节）
-│   └── push.py                # 订阅者过滤（安静时段/事件订阅）+ context.send_message
-│
-├── llm/
-│   ├── prompts.py             # 系统提示词、防编造约束、模板
-│   ├── bridge.py              # llm_generate 封装：超时/失败降级/预算/供应商选择
-│   └── tools.py               # @filter.llm_tool 自然语言入口（第 8.2 节）
-│
-├── hooks.py                   # 事件总线（第 10.1 节）
-└── data/protocol_profiles/
-    ├── a1_v1.json             # 可热更新的字段映射/端点/状态码表
-    └── dryer_v1.json          # 二期占位
+└── tests/                     # 本地验证，不参与插件加载
+    ├── run_tests.py           # 入口：python tests/run_tests.py
+    ├── test_core.py           # 57 项：事件/规则/路由/合并/渲染/加密/存储
+    ├── test_plugin_smoke.py   # 25 项：用 stub 宿主验装配、绑定链路、推送链路
+    └── stubs/astrbot/         # 最小 AstrBot stub（Star/Context/filter/MessageChain）
 ```
+
+**为什么逻辑收进一个子包 `bambu_a1/`**：插件若把 `core.py` / `llm/` / `ui/` 直接摊在插件根目录，
+就必须把插件目录塞进 `sys.path` 才能导入，会与其它插件产生同名模块冲突（多个插件都叫 `core` 时
+后加载的会覆盖前面的，reload 后更难排查）。收进唯一命名的 `bambu_a1/` 后，
+`main.py` 用"先相对导入、失败再兜底"的两段式导入即可同时兼容两种宿主加载方式。
+协议档案跟着代码走（`bambu_a1/protocol_profiles/`），避免运行期数据目录与可入库资产混在一起。
 
 运行期数据（不在插件目录，遵循 AstrBot 规范）：
 
@@ -225,9 +232,8 @@ data/plugin_data/astrbot_plugin_bambu_a1/
 ├── account.json        # 加密凭据：region / phone_masked / uid / username / token_cipher / key_id
 ├── subscribers.json    # 推送目标 umo 列表 + 各自的过滤/安静时段
 ├── rules.json          # 用户提醒规则
-├── snapshot.json       # 最近一次合并后的快照（重启后立即有数据）
-├── event_state.json    # 去重指纹 + 任务基线（重启不重复报警）
-└── events.jsonl        # 事件流水（按大小轮转，默认保留 5MB）
+├── event_state.json    # 最近快照 + 去重指纹 + 任务基线（重启不重复报警）
+└── events.jsonl        # 事件流水（按大小轮转，默认 5MB / 保留 2 份）
 ```
 
 ---
@@ -833,7 +839,6 @@ class DryerEsp32Adapter(DeviceAdapter):
 ---
 
 ## 17. 版本控制与工程规范
-
 写代码阶段全程 git，**一次提交只做一件事**，每个里程碑打 tag 便于回滚。
 
 ### 17.1 仓库布局
@@ -877,3 +882,28 @@ asterboot-bambulabMQTT/            ← git 仓库根
 git clone <repo> AstrBot/data/plugins/astrbot_plugin_bambu_a1
 # 需要试错时另开分支，别在 main 上堆未验证的实验代码
 ```
+
+---
+
+## 18. 实现状态
+
+### 18.1 已实现（本地 82 项测试全绿）
+
+| 里程碑 | 内容 | 验证方式 |
+|---|---|---|
+| M1 骨架 | `metadata.yaml`、`_conf_schema.json`（23 项）、协议档案 `a1_v1`、`store`（原子写/轮转）、`compat`（字段映射/漂移/端点表） | `test_core.TestStore` / `TestCompat` |
+| M2 绑定 | AES-256-GCM + 机器盐、发码/登录/换 uid/列举设备、`/banbu bind\|code\|sn\|devices\|unbind` | `TestCredentials` + 冒烟测试 `test_bind_flow_encrypts_token`（断言明文不落盘） |
+| M3 监控 | MQTT poll + stream（增量深合并）、`monitor` 自动降级/退避/静默判离线、`events` 检测与去重、13 种规则 | `TestEventDetect` / `TestEventStateDedup` / `TestRules` |
+| M4 直推 | `router` 三级优先级 + 总闸、`coalescer` 合并窗口、`render` 模板、`push` 订阅者/安静时段、8 个钩子 | `TestRouter` / `TestCoalescer` / `TestRender` / `TestQuietHours` |
+| M5 LLM | `prompts` 防编造、`bridge` 超时/预算/降级、9 个 llm_tool、自然语言问答与规则解析 | 冒烟测试 `test_llm_merged_into_single_message`、`test_critical_event_reaches_push_even_if_llm_slow` |
+| M6 二期接口 | `DeviceAdapter` + `PollSource`/`PushSource`、烘干箱骨架（`available=False`） | `test_command_group_registered`、`/banbu device list` |
+| M7 打磨 | `/banbu protocol` 漂移表、`/banbu route`、`test-event`、事件流水、README | 冒烟测试全量 |
+
+### 18.2 还没做 / 需要在真机验证
+
+- **真机联调**：本机没有 AstrBot 与打印机，MQTT 实际收发、云端发码/登录、平台主动消息
+  三者属于"必须在宿主里实测"的部分；代码层已按协议实现并把失败路径都做了可读降级。
+- **烘干箱**：适配器骨架 + 配置位就绪，`available=False`；按 `dryer_esp32.py` 里的 TODO 清单填实现即可，不需改 `core`。
+- **周期摘要**：保留了 `task_summary` / `periodic_digest` 事件类型与 `llm_route` 位，
+  自动定时生成尚未接线（当前用 `/banbu digest` 手动触发），避免默认就产生周期性模型调用。
+- **多打印机**：数据模型带 `device` 字段，注册表支持多适配器；当前只实例化单台 A1。
