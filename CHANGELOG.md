@@ -32,4 +32,4 @@
 - 控制：灯光、暂停、继续、停止（危险操作需二次确认）
 - 诊断：`/banbu protocol` 协议漂移表、`/banbu test-event` 链路自检
 - 二期接口：`DeviceAdapter` + `PollSource`/`PushSource`，烘干箱骨架（`available=False`）
-- 测试：115 项（核心逻辑 + stub 宿主冒烟 + 规范合规），不联网、不需要 AstrBot
+- 测试：118 项（核心逻辑 + stub 宿主冒烟 + 规范合规 + 文档链接检查），不联网、不需要 AstrBot

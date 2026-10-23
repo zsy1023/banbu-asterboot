@@ -928,7 +928,7 @@ $env:BAMBU_NO_AUTOPUSH=1     # 单次提交跳过自动推送（例如临时 WIP
 
 ## 18. 实现状态
 
-### 18.1 已实现（本地 115 项测试全绿）
+### 18.1 已实现（本地 118 项测试全绿）
 
 | 里程碑 | 内容 | 验证方式 |
 |---|---|---|
@@ -993,8 +993,8 @@ $env:BAMBU_NO_AUTOPUSH=1     # 单次提交跳过自动推送（例如临时 WIP
 
 | 指标 | 结果 |
 |---|---|
-| 体积 | 约 90 KB（上限 16 MB） |
-| 文件数 | 39 |
+| 体积 | 约 122 KB（上限 16 MB） |
+| 文件数 | 42 |
 | 包根内容 | `metadata.yaml`、`main.py`、`_conf_schema.json`、`requirements.txt`、`bambu_a1/`、`.astrbot-plugin/`、`README.md`、`CHANGELOG.md`、`ARCHITECTURE.md`、`LICENSE`、`logo.png`、`banner.png` |
 | 已排除 | `tests/`、`tools/`、`.gitignore`（`.gitattributes` 的 `export-ignore` 生效） |
 

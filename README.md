@@ -310,7 +310,7 @@ banbu-asterboot/
 │   ├── tools.py               # 自然语言工具实现
 │   ├── adapters/              # 设备适配器（A1 已实现，烘干箱骨架）
 │   └── protocol_profiles/     # 可热更新字段映射
-└── tests/                     # 115 项本地测试（不随插件包分发）
+└── tests/                     # 118 项本地测试（不随插件包分发）
 ```
 
 </details>
@@ -321,7 +321,7 @@ banbu-asterboot/
 <summary><h2>🧪 自检</h2></summary>
 
 ```bash
-python tests/run_tests.py     # 115 项，不联网、不需要 AstrBot
+python tests/run_tests.py     # 118 项，不联网、不需要 AstrBot
 ```
 
 覆盖：事件检测与去重、13 种规则、路由三级优先级、合并窗口（含模型超窗仍发事实）、
