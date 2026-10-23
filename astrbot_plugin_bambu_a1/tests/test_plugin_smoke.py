@@ -365,6 +365,98 @@ class PluginSmokeTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("/banbu bind", result)
         self.assertIn("/banbu code", result)
 
+    # ── 控制类命令 ──────────────────────────────────────────
+    async def _stub_adapter(self):
+        from bambu_a1.models import ActionResult
+
+        calls = []
+
+        async def fake_execute(action):
+            calls.append(action)
+            return ActionResult(ok=True, message=f"{action.kind} ok")
+
+        async def fake_execute_fail(action):
+            calls.append(action)
+            return ActionResult(ok=False, message="MQTT 通道不可用")
+
+        self.plugin.adapter.execute = fake_execute
+        self._adapter_calls = calls
+        self._adapter_fail = fake_execute_fail
+
+    async def test_light_toggles(self):
+        await self._stub_adapter()
+        text = await self.run_cmd("light", "/banbu light on")
+        self.assertIn("灯光", text)
+        self.assertEqual(self._adapter_calls[0].kind, "light")
+        self.assertEqual(self._adapter_calls[0].params["mode"], "on")
+
+    async def test_light_without_arg_toggles_from_state(self):
+        await self._stub_adapter()
+        self.plugin.event_state.last_snapshot = self.module.Snapshot(connected=True, light="on")
+        await self.run_cmd("light", "/banbu light")
+        self.assertEqual(self._adapter_calls[0].params["mode"], "off")
+
+    async def test_resume_and_pause_confirm(self):
+        await self._stub_adapter()
+        text = await self.run_cmd("resume", "/banbu resume")
+        self.assertIn("继续", text)
+        self.assertEqual(self._adapter_calls[0].kind, "resume")
+
+        text = await self.run_cmd("pause", "/banbu pause")
+        self.assertIn("confirm", text)
+        self.assertEqual(len(self._adapter_calls), 1, "未确认时不能真的发指令")
+
+        text = await self.run_cmd("pause", "/banbu pause confirm")
+        self.assertIn("暂停", text)
+        self.assertEqual(self._adapter_calls[1].kind, "pause")
+
+    async def test_action_failure_is_reported(self):
+        await self._stub_adapter()
+        self.plugin.adapter.execute = self._adapter_fail
+        text = await self.run_cmd("resume", "/banbu resume")
+        self.assertIn("失败", text)
+
+    # ── 其他命令 ────────────────────────────────────────────
+    async def test_monitor_status_and_mode(self):
+        text = await self.run_cmd("monitor", "/banbu monitor status")
+        self.assertIn("监控状态", text)
+        self.assertIn("推送目标", text)
+
+        text = await self.run_cmd("monitor", "/banbu monitor poll")
+        self.assertIn("poll", text)
+        self.assertEqual(self.config["monitor_mode"], "poll")
+
+    async def test_digest_without_history(self):
+        text = await self.run_cmd("digest")
+        self.assertIn("还没有事件记录", text)
+
+    async def test_digest_falls_back_to_stats_when_llm_off(self):
+        self.plugin.config["llm_mode"] = "off"
+        for i in range(3):
+            await self.plugin._on_events(
+                [DeviceEvent(type="print_started" if i % 2 else "print_finished", data={})], None
+            )
+        text = await self.run_cmd("digest")
+        self.assertIn("纯统计", text)
+        self.assertFalse(self.context.llm_calls)
+
+    async def test_device_list_marks_dryer_unimplemented(self):
+        text = await self.run_cmd("device", "/banbu device list")
+        self.assertIn("bambu_a1", text)
+        self.assertIn("dryer_esp32", text)
+        self.assertIn("二期", text)
+        self.assertIn("未启用", text)
+
+    async def test_subscribe_and_unsubscribe(self):
+        text = await self.run_cmd("subscribe", "/banbu subscribe")
+        self.assertIn("已加入", text)
+        self.assertIn("stub:FriendMessage:1001", self.plugin.subscribers.umos())
+        text = await self.run_cmd("subscribe", "/banbu subscribe")
+        self.assertIn("本来就在", text)
+        text = await self.run_cmd("unsubscribe", "/banbu unsubscribe")
+        self.assertIn("已退出", text)
+        self.assertEqual(self.plugin.subscribers.umos(), [])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
