@@ -316,7 +316,7 @@ class DeviceEvent:
     device: str          # device key, e.g. "bambu_a1"
     data: dict           # 结构化事实（温度、层号、错误码、任务名…）
     rule_id: str | None  # 命中哪条用户规则
-    channel: str         # push | push_llm   ← 路由决策，见第 6 节
+    channel: str         # direct | llm | both   ← 路由决策，见 6.3
     dedup_key: str       # 任务内唯一指纹，用于去重与持久化
     ts: float
 ```
