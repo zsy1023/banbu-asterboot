@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 from typing import Any, AsyncIterator, Callable
 
 from .. import mqtt
 from ..compat import Profile
+from ..logging_compat import get_logger
 from ..models import ActionResult, DeviceAction, Snapshot
 from .base import DeviceAdapter, PollSource, PushSource, register_adapter
 
-logger = logging.getLogger("astrbot.plugin.bambu_a1.adapter")
+logger = get_logger("adapter")
 
 
 class _BambuPollSource(PollSource):

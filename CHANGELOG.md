@@ -3,6 +3,26 @@
 本项目的版本号与 `metadata.yaml` 的 `version` 保持一致（语义化版本，不带 `v` 前缀）。
 每个版本对应的 git tag 为 `v<version>`。
 
+## 0.1.2
+
+**修复：一条日志把命令打挂（`Formatting field not found in record: 'plugin_tag'`）**
+
+- 现象：`/banbu bind` 直接报错，堆栈落在 `bambu_a1/auth.py` 的 `logger.info(...)`
+- 根因：各模块用 `logging.getLogger("astrbot.plugin.bambu_a1.*")` 自建 logger，
+  名字落在宿主的 `astrbot.*` 命名空间，但不是通过 `LogManager.get_plugin_logger()`
+  创建的，缺少 `_RecordEnricherFilter` 注入的 `plugin_tag`；
+  记录冒泡到宿主 `astrbot` logger 上的 `LogQueueHandler` 时
+  `self.format(record)` 抛 `ValueError`（该 handler 不走 `handleError`，异常直接冒出来）
+- 修复：新增 `bambu_a1/logging_compat.py` 日志适配层
+  - 插件 `__init__` 里 `bind_plugin_logger(self.logger)`，之后所有模块日志都走宿主插件 logger
+    （WebUI 日志面板里带正确 `[插件名]` 标签，也能按插件调日志级别）
+  - 未绑定前回退到 `bambu_a1` logger（刻意不在 `astrbot.*` 下）
+  - 门面内部吞掉日志系统异常：**日志永远不能影响业务**
+  - 模块名以 `[auth]` `[mqtt]` 这类前缀保留在消息里，排查体验不变
+- 新增 `tests/test_logging.py`（9 项）：AST 检查禁止自建 `astrbot.*` logger、
+  严格 formatter 复现宿主行为、绑定前后都能正常记录、handler 抛异常不打断业务
+- 顺带移除 `main.py` 里未使用的 `astrbot.api.logger` 导入
+
 ## 0.1.1
 
 **按 AstrBot 插件市场规范调整（破坏性：安装方式）**

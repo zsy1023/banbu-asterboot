@@ -10,15 +10,15 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 import requests
 
 from .compat import Profile
 from .credentials import mask_phone
+from .logging_compat import get_logger
 
-logger = logging.getLogger("astrbot.plugin.bambu_a1.auth")
+logger = get_logger("auth")
 
 BROWSER_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "

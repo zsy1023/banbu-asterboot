@@ -197,6 +197,7 @@ banbu-asterboot/               ← 仓库根 == 插件包根（AstrBot 只认包
 ├── bambu_a1/                  # 逻辑全部在这里，可脱离 astrbot 单测
 │   ├── models.py              # Snapshot / DeviceEvent / Rule / Account / DeviceAction 数据类
 │   ├── store.py               # 原子写 JSON（tmp+replace）、轮转 jsonl、锁
+│   ├── logging_compat.py      # 日志门面：只用宿主插件 logger，绝不进 astrbot.* 命名空间
 │   ├── compat.py              # 协议档案：端点表 / 字段映射 / 状态映射 / 漂移统计
 │   ├── credentials.py         # AES-256-GCM + 机器绑定盐，密钥派生与掩码
 │   ├── auth.py                # 发码 / 登录 / 换 uid / 列举设备（端点全来自档案）
@@ -224,7 +225,8 @@ banbu-asterboot/               ← 仓库根 == 插件包根（AstrBot 只认包
 │   ├── run_tests.py           # 入口：python tests/run_tests.py
 │   ├── test_core.py           # 事件/规则/路由/合并/渲染/加密/存储/监控集成
 │   ├── test_plugin_smoke.py   # 用 stub 宿主验装配、绑定链路、推送链路
-│   ├── test_packaging.py      # 市场规范合规（元数据/体积/i18n/目录布局）
+│   ├── test_packaging.py      # 市场规范合规（元数据/体积/i18n/目录布局/文档链接）
+│   ├── test_logging.py        # 日志兼容层（禁止 astrbot.* 自建 logger、宿主 formatter 复现）
 │   └── stubs/astrbot/         # 最小 AstrBot stub（Star/Context/filter/MessageChain）
 │
 ├── tools/                     # 开发脚本，不随插件包分发
@@ -240,6 +242,12 @@ banbu-asterboot/               ← 仓库根 == 插件包根（AstrBot 只认包
 后加载的会覆盖前面的，reload 后更难排查）。收进唯一命名的 `bambu_a1/` 后，
 `main.py` 用"先相对导入、失败再兜底"的两段式导入即可同时兼容两种宿主加载方式。
 协议档案跟着代码走（`bambu_a1/protocol_profiles/`），避免运行期数据目录与可入库资产混在一起。
+
+**日志约束（0.1.2 事故后固化）**：`bambu_a1/*` 里一律 `from .logging_compat import get_logger`，
+禁止 `logging.getLogger("astrbot...")`。宿主 `astrbot` logger 上挂着格式串含 `%(plugin_tag)s` 的
+`LogQueueHandler`，而 `plugin_tag` 只由 `LogManager` 创建 logger 时注入的 `_RecordEnricherFilter` 提供；
+自建同名空间 logger 的记录冒泡上去会直接抛 `ValueError` 把命令打挂。门面另外吞掉日志系统异常，
+保证"日志永远不影响业务"，并在绑定宿主 logger 前回退到 `bambu_a1` logger（不在 `astrbot.*` 下）。
 
 运行期数据（不在插件目录，遵循 AstrBot 规范）：
 
@@ -928,7 +936,7 @@ $env:BAMBU_NO_AUTOPUSH=1     # 单次提交跳过自动推送（例如临时 WIP
 
 ## 18. 实现状态
 
-### 18.1 已实现（本地 118 项测试全绿）
+### 18.1 已实现（本地 127 项测试全绿）
 
 | 里程碑 | 内容 | 验证方式 |
 |---|---|---|
