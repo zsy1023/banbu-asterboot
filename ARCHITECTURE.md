@@ -887,7 +887,7 @@ git clone <repo> AstrBot/data/plugins/astrbot_plugin_bambu_a1
 
 ## 18. 实现状态
 
-### 18.1 已实现（本地 93 项测试全绿）
+### 18.1 已实现（本地 97 项测试全绿）
 
 | 里程碑 | 内容 | 验证方式 |
 |---|---|---|

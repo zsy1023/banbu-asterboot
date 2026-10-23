@@ -53,7 +53,7 @@
 
 ```bash
 cd astrbot_plugin_bambu_a1
-python tests/run_tests.py     # 93 项，不联网、不需要 AstrBot
+python tests/run_tests.py     # 97 项，不联网、不需要 AstrBot
 ```
 
 ## 已知边界

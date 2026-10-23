@@ -495,6 +495,122 @@ class TestRender(unittest.TestCase):
         self.assertEqual(render.fmt_minutes(None), "未知")
 
 
+# ─────────────────────────── 监控引擎集成 ───────────────────────────
+class TestMonitorIntegration(unittest.IsolatedAsyncioTestCase):
+    """用脚本化快照驱动 MonitorEngine，验证 IDLE→RUNNING→PAUSE→FINISH 全链路。"""
+
+    class _FakePoll:
+        def __init__(self):
+            self.queue: list[dict] = []
+
+        async def fetch(self):
+            return self.queue.pop(0) if self.queue else None
+
+    class _FakeAdapter:
+        key = "fake"
+
+        def __init__(self):
+            self._poll = TestMonitorIntegration._FakePoll()
+
+        def poll_source(self):
+            return self._poll
+
+        def push_source(self):
+            return None
+
+        def stop_stream(self):
+            return None
+
+        def to_snapshot(self, raw):
+            return self.profile.to_snapshot(raw)  # type: ignore[attr-defined]
+
+    async def asyncSetUp(self):
+        from bambu_a1.monitor import MonitorEngine
+
+        self.tmp = tempfile.TemporaryDirectory()
+        self.profile = load_profile("a1_v1")
+        self.adapter = self._FakeAdapter()
+        self.adapter.profile = self.profile
+        self.rules = RuleEngine(os.path.join(self.tmp.name, "rules.json"))
+        self.state = EventState(os.path.join(self.tmp.name, "state.json"))
+        self.events: list[DeviceEvent] = []
+        self.snapshots: list[Snapshot] = []
+        self.monitor = MonitorEngine(
+            adapter=self.adapter,
+            profile=self.profile,
+            rules=self.rules,
+            state=self.state,
+            config=lambda key, default=None: {"stale_after": 90, "progress_milestones": [50]}.get(key, default),
+            on_snapshot=self._on_snapshot,
+            on_events=self._on_events,
+        )
+
+    async def asyncTearDown(self):
+        self.tmp.cleanup()
+
+    async def _on_snapshot(self, snap):
+        self.snapshots.append(snap)
+
+    async def _on_events(self, events, snap):
+        self.events.extend(events)
+
+    async def _push(self, **overrides):
+        await self.monitor._handle_raw(raw_print(**overrides))
+
+    def _types(self) -> list[str]:
+        return [e.type for e in self.events]
+
+    async def test_full_print_lifecycle(self):
+        await self._push(gcode_state="IDLE", mc_percent=0, layer_num=0)
+        self.assertNotIn(EV_PRINT_STARTED, self._types(), "首轮只建基线，不误报")
+
+        await self._push(gcode_state="RUNNING", mc_percent=5, layer_num=10)
+        self.assertIn(EV_PRINT_STARTED, self._types())
+
+        await self._push(gcode_state="PAUSE", mc_percent=52, layer_num=120, stg_cur=16)
+        self.assertIn(EV_PRINT_PAUSED, self._types())
+        self.assertIn(EV_MILESTONE, self._types(), "跨过 50% 应有里程碑")
+
+        await self._push(gcode_state="RUNNING", mc_percent=52, layer_num=121)
+        self.assertIn("print_resumed", self._types())
+
+        await self._push(gcode_state="FINISH", mc_percent=100, layer_num=240)
+        self.assertIn(EV_PRINT_FINISHED, self._types())
+
+        # 同一状态重复上报不应重复触发
+        before = len(self.events)
+        await self._push(gcode_state="FINISH", mc_percent=100, layer_num=240)
+        self.assertEqual(len(self.events), before)
+
+    async def test_offline_detected_after_silence(self):
+        await self._push(gcode_state="RUNNING")
+        self.events.clear()
+        # 把最近一份快照的时间推回 10 分钟前，模拟没有新报文
+        self.state.last_snapshot.ts -= 600
+        await self.monitor._check_stale()
+        self.assertIn("offline", self._types())
+
+        # 恢复后应有 online
+        await self._push(gcode_state="RUNNING")
+        self.assertIn("online", self._types())
+
+    async def test_user_offline_rule_shortens_threshold(self):
+        base = self.monitor._offline_threshold_s()
+        self.assertEqual(base, 90)
+        self.rules.add("offline", 1)  # 1 分钟 = 60s < 90s，应该缩短
+        self.assertEqual(self.monitor._offline_threshold_s(), 60)
+        self.rules.clear()
+        self.rules.add("offline", 10)  # 600s > 90s，仍以 stale_after 为准
+        self.assertEqual(self.monitor._offline_threshold_s(), 90)
+
+    async def test_snapshot_callback_receives_normalized_data(self):
+        await self._push(gcode_state="RUNNING", mc_percent=33)
+        snap = self.snapshots[-1]
+        self.assertEqual(snap.state, "printing")
+        self.assertEqual(snap.percent, 33)
+        self.assertEqual(snap.task_name, "benchy_0.2mm")
+
+
 # ─────────────────────────── 推送与安静时段 ───────────────────────────
 class TestQuietHours(unittest.TestCase):
     def test_parse(self):
