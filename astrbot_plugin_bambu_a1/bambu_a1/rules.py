@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import os
-import time
 import uuid
 from typing import Any
 
@@ -173,6 +172,11 @@ class RuleEngine:
         return None
 
     # ── 判定 ────────────────────────────────────────────────
+    def offline_threshold_minutes(self) -> float | None:
+        """用户若设了 offline 规则，用它（取最小）作为离线判定阈值。"""
+        values = [float(r.value) for r in self.enabled() if r.type == "offline" and r.value]
+        return min(values) if values else None
+
     def evaluate(self, prev: Snapshot | None, cur: Snapshot) -> list[DeviceEvent]:
         """返回命中的规则事件（不含去重，去重由 EventState 做）。"""
         hits: list[DeviceEvent] = []
@@ -276,14 +280,8 @@ class RuleEngine:
                 return {"trays": low, "stamp": min(int(t["remain"]) for t in low)}
             return None
 
-        if rtype == "offline":
-            if cur.connected:
-                return None
-            idle_min = (time.time() - prev.ts) / 60
-            if idle_min >= float(value):
-                return {"idle_min": round(idle_min, 1), "stamp": int(idle_min)}
-            return None
-
+        # offline 规则由 MonitorEngine 的静默看门狗消费
+        # （见 RuleEngine.offline_threshold_minutes），这里不重复判定。
         return None
 
     def _match_temp(self, rule: Rule, prev: Snapshot, cur: Snapshot) -> dict[str, Any] | None:

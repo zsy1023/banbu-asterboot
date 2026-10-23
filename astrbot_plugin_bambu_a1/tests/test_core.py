@@ -321,6 +321,23 @@ class TestRules(unittest.TestCase):
         self.assertEqual(parse_temp_range("40~30"), (30.0, 40.0))
         self.assertIsNone(parse_temp_range("abc"))
 
+    def test_offline_rule_shortens_watchdog(self):
+        from bambu_a1.monitor import MonitorEngine
+
+        self.assertIsNone(self.engine.offline_threshold_minutes())
+        self.engine.add("offline", 2)
+        self.engine.add("offline", 5)
+        self.assertEqual(self.engine.offline_threshold_minutes(), 2.0)
+
+        monitor = MonitorEngine(
+            adapter=object(),  # 这个判定不碰适配器
+            profile=self.profile,
+            rules=self.engine,
+            state=None,
+            config=lambda key, default=None: {"stale_after": 600}.get(key, default),
+        )
+        self.assertEqual(monitor._offline_threshold_s(), 120, "应取用户规则的 2 分钟")
+
 
 # ─────────────────────────── 路由 ───────────────────────────
 class TestRouter(unittest.TestCase):
@@ -415,6 +432,22 @@ class TestCoalescer(unittest.IsolatedAsyncioTestCase):
         await coal.submit([DeviceEvent(type=EV_PRINT_PAUSED, severity="critical")])
         await asyncio.sleep(0.2)
         self.assertEqual(len(batches), 1)
+
+    async def test_later_events_do_not_postpone_window(self):
+        """窗口从第一条事件开始计时，后续事件不能把截止时间一直往后推。"""
+        batches = []
+
+        async def sink(events):
+            batches.append(events)
+
+        coal = Coalescer(sink, window_s=0.2, critical_window_s=0.2)
+        await coal.submit([DeviceEvent(type=EV_PRINT_STARTED, data={})])
+        await asyncio.sleep(0.12)
+        await coal.submit([DeviceEvent(type=EV_MILESTONE, data={"percent": 25})])
+        await asyncio.sleep(0.15)  # 距第一条已经 0.27s > 0.2s
+        self.assertEqual(len(batches), 1, "窗口被推迟了")
+        self.assertEqual(len(batches[0]), 2, "两条事件应合并进同一条")
+        self.assertGreaterEqual(batches[0][0].ts, 0)
 
 
 # ─────────────────────────── 渲染 ───────────────────────────

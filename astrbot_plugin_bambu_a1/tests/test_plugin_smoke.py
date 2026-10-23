@@ -195,9 +195,22 @@ class PluginSmokeTest(unittest.IsolatedAsyncioTestCase):
     async def test_unbind_requires_confirm(self):
         text = await self.run_cmd("unbind", "/banbu unbind")
         self.assertIn("confirm", text)
+        # 先完整绑定，确认解绑真的把凭据与缓存都清掉（回归：曾因缓存残留导致仍显示已绑定）
+        await self.run_cmd("bind", "/banbu bind 13800001111")
+        await self.run_cmd("code", "/banbu code 123456")
+        await self.run_cmd("sn", "/banbu sn 01P00A12345678")
+        self.assertTrue(self.plugin.is_bound())
+
         text = await self.run_cmd("unbind", "/banbu unbind confirm")
         self.assertIn("已清除", text)
-        self.assertFalse(self.plugin.is_bound())
+        self.assertFalse(self.plugin.is_bound(), "解绑后 is_bound() 必须为 False")
+        self.assertEqual(self.plugin.subscribers.umos(), [])
+
+        account_path = os.path.join(self.plugin.data_dir, "account.json")
+        self.assertEqual(json.loads(open(account_path, encoding="utf-8").read()), {})
+        # 再读一次也不能"复活"
+        fresh = self.module.BambuA1Plugin(self.context, self.config)
+        self.assertFalse(fresh.is_bound())
 
     async def test_devices_listing(self):
         await self.run_cmd("bind", "/banbu bind 13800001111")

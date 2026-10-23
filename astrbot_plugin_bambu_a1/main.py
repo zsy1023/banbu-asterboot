@@ -37,7 +37,7 @@ try:  # pragma: no cover - 取决于宿主加载方式
     from .bambu_a1.monitor import MonitorEngine
     from .bambu_a1.push import Pusher, Subscribers, parse_quiet_range
     from .bambu_a1.rules import RULE_TYPES, RuleEngine, parse_temp_range
-    from .bambu_a1.store import JsonFile, append_jsonl, tail_jsonl, write_json
+    from .bambu_a1.store import JsonFile, append_jsonl, tail_jsonl
     from .bambu_a1.tools import BambuTools
 except ImportError:  # 宿主把 main.py 当顶层模块加载时
     if _HERE not in sys.path:
@@ -61,7 +61,7 @@ except ImportError:  # 宿主把 main.py 当顶层模块加载时
     from bambu_a1.monitor import MonitorEngine
     from bambu_a1.push import Pusher, Subscribers, parse_quiet_range
     from bambu_a1.rules import RULE_TYPES, RuleEngine, parse_temp_range
-    from bambu_a1.store import JsonFile, append_jsonl, tail_jsonl, write_json
+    from bambu_a1.store import JsonFile, append_jsonl, tail_jsonl
     from bambu_a1.tools import BambuTools
 
 from astrbot.api import logger
@@ -467,9 +467,11 @@ class BambuA1Plugin(Star):
         return "\n".join(lines)
 
     def do_unbind(self) -> str:
+        # 用 JsonFile.set 清空，保证缓存与文件一致（否则 is_bound() 会继续返回 True）
         with contextlib.suppress(Exception):
-            write_json(os.path.join(self.data_dir, "account.json"), {})
+            self.account_file.set({})
         self._account_cache.clear()
+        self.set_config("serial", "")
         self.event_state.reset()
         self.event_state.save()
         self.subscribers.clear()

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import time
 from typing import Any, Awaitable, Callable
 
 from .models import CH_BOTH, CH_LLM, SEV_CRITICAL, DeviceEvent
@@ -35,6 +36,7 @@ class Coalescer:
         self._log = logger
         self._buffers: dict[str, list[DeviceEvent]] = {}
         self._timers: dict[str, asyncio.Task] = {}
+        self._deadlines: dict[str, float] = {}
         self._drafts: dict[int, asyncio.Task] = {}
 
     # ── 提交 ────────────────────────────────────────────────
@@ -73,22 +75,27 @@ class Coalescer:
         return self.window_s
 
     def _schedule(self, key: str) -> None:
+        """窗口从第一条事件开始计时；后来的事件不会把截止时间往后推。"""
         events = self._buffers.get(key) or []
         if not events:
             return
         delay = self._delay(events)
+        now = time.monotonic()
+        desired = now + delay
+        current = self._deadlines.get(key)
+        if current is not None and current <= desired:
+            return  # 已有更早的截止时间，保持不动
         old = self._timers.pop(key, None)
         if old and not old.done():
             old.cancel()
-        if delay <= 0:
-            task = asyncio.create_task(self._flush(key), name=f"flush-{key}")
-        else:
-            task = asyncio.create_task(self._delayed_flush(key, delay), name=f"flush-{key}")
+        self._deadlines[key] = desired
+        task = asyncio.create_task(self._flush_after(key, desired - now), name=f"flush-{key}")
         self._timers[key] = task
 
-    async def _delayed_flush(self, key: str, delay: float) -> None:
+    async def _flush_after(self, key: str, delay: float) -> None:
         try:
-            await asyncio.sleep(delay)
+            if delay > 0:
+                await asyncio.sleep(delay)
         except asyncio.CancelledError:
             return
         await self._flush(key)
@@ -96,6 +103,7 @@ class Coalescer:
     async def _flush(self, key: str) -> None:
         events = self._buffers.pop(key, [])
         self._timers.pop(key, None)
+        self._deadlines.pop(key, None)
         if not events:
             return
         # 把已经完成的模型补写落到事件上；没完成的直接丢弃（已超窗）

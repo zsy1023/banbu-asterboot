@@ -260,7 +260,7 @@ class MonitorEngine:
                 self._report_error(exc, "dispatch")
 
     async def _check_stale(self) -> None:
-        stale_after = int(self._config("stale_after", 90) or 90)
+        stale_after = self._offline_threshold_s()
         prev = self.state.last_snapshot
         evt = detect_offline(prev, stale_after)
         if not evt:
@@ -272,6 +272,17 @@ class MonitorEngine:
         if self.state.remember(evt.dedup_key) and self._on_events and prev:
             with contextlib.suppress(Exception):
                 await self._on_events([evt], prev)
+
+    def _offline_threshold_s(self) -> int:
+        """配置的 stale_after 与用户 offline 规则取较小值。"""
+        base = int(self._config("stale_after", 90) or 90)
+        try:
+            minutes = self.rules.offline_threshold_minutes()
+        except Exception:  # noqa: BLE001
+            minutes = None
+        if minutes:
+            return max(10, min(base, int(minutes * 60)))
+        return base
 
     async def refresh_now(self) -> bool:
         """强制刷新一次（命令用）。轮询模式下唤醒循环；推模式下靠连接自身心跳。"""
