@@ -72,21 +72,41 @@ def _fetch_csrf(session, csrf_url: str) -> str | None:
 
 
 def send_sms(profile: Profile, region: str, phone: str) -> dict[str, Any]:
-    """发送短信验证码。
+    """发送短信验证码（流程对齐 banbu-a1-Status-acquisition/auth.py 的 send_sms）。
 
-    返回 {"ok": bool, "status": int, "error": str}；
-    发出去就算成功——这个接口经常 504，但短信通常已下发。
+    照搬 ha-bambulab / bambuddy 的做法：
+      - 端点 {sms_base}/api/v1/user-service/user/sendsmscode
+      - 先 GET /api/csrf 取 bbl_csrf_token，同一 session 带 cookie + x-bbl-csrf-token 头
+      - 用 curl_cffi impersonate="chrome" 过 Cloudflare（**这一步是能否收到短信的关键**）
+
+    返回 {"ok", "status", "error", "warning"}：
+      - 发出去就算流程成功（该接口经常 504，但短信通常已下发）
+      - 但如果 5xx 且没装 curl_cffi，短信基本发不出去 → 用 warning 明确告诉用户
     """
     phone = (phone or "").strip()
     if not phone:
+        logger.warning("发送验证码失败：手机号为空")
         return {"ok": False, "status": 0, "error": "手机号为空"}
     if "*" in phone or not phone.isdigit():
-        return {"ok": False, "status": 0, "error": "手机号格式不正确（请输入完整 11 位号码，不要用脱敏号）"}
+        # 常见误用：把界面上的脱敏号（177****5191）直接发过来
+        logger.warning("发送验证码失败：手机号格式非法 %r", phone)
+        return {
+            "ok": False,
+            "status": 0,
+            "error": "手机号格式不正确（请输入完整 11 位号码，不要用脱敏号）",
+        }
 
     urls = profile.endpoints(region)
     masked = mask_phone(phone)
-    logger.info("请求短信验证码: %s", masked)
+    logger.info("正在请求短信验证码: %s -> %s", masked, urls["sms_url"])
+    if not _CURL_OK:
+        logger.warning(
+            "未安装 curl_cffi：拓竹云端有 Cloudflare，裸 requests 常返回 504 且短信不下发。"
+            "请在 AstrBot 的 Python 环境里 pip install curl_cffi 后重试。"
+        )
 
+    status = 0
+    body_snippet = ""
     try:
         session = _session()
         csrf = _fetch_csrf(session, urls["csrf_url"])
@@ -104,15 +124,34 @@ def send_sms(profile: Profile, region: str, phone: str) -> dict[str, Any]:
             timeout=SMS_TIMEOUT,
             **_kw(),
         )
-        logger.info("验证码请求已发出: %s | HTTP %s", masked, resp.status_code)
+        status = int(getattr(resp, "status_code", 0) or 0)
+        body_snippet = str(getattr(resp, "text", "") or "")[:200]
+        logger.info("验证码请求已发出: %s | HTTP %s | 响应 %r", masked, status, body_snippet)
+        try:
+            session.close()
+        except Exception:  # noqa: BLE001
+            pass
     except Exception as exc:  # noqa: BLE001
+        # 请求已发出，只是响应超时/异常；短信有时已经下发
         logger.info(
             "验证码请求已发出（响应异常）: %s | %s: %s",
             masked,
             type(exc).__name__,
             str(exc)[:150],
         )
-    return {"ok": True, "status": 200, "error": ""}
+
+    warning = ""
+    if status >= 500:
+        if not _CURL_OK:
+            warning = (
+                "云端返回 5xx（Cloudflare 拦截），且当前未安装 curl_cffi，短信大概率没有下发。\n"
+                "请先在 AstrBot 的 Python 环境安装：pip install curl_cffi，然后重新 /banbu bind"
+                "（或直接重载插件让它按 requirements.txt 自动安装）。"
+            )
+        else:
+            warning = "云端返回 5xx（上游超时），短信通常仍会到达。等 1 分钟没收到再重发一次。"
+
+    return {"ok": True, "status": status or 200, "error": "", "warning": warning}
 
 
 def login_with_code(

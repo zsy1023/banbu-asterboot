@@ -380,7 +380,11 @@ class BambuA1Plugin(Star):
             "region": region,
             "expire": time.time() + PENDING_BIND_TTL,
         }
-        extra = "" if auth.has_curl_cffi() else "\n（未安装 curl_cffi，若收不到码可 pip install curl_cffi 再试）"
+        warning = str(result.get("warning") or "")
+        status = int(result.get("status") or 0)
+        if warning:
+            return f"⚠️ 验证码请求已发出（HTTP {status}）\n{warning}"
+        extra = "" if auth.has_curl_cffi() else "\n（提示：未安装 curl_cffi，若收不到码先 pip install curl_cffi）"
         return (
             f"验证码已发送到 {mask_phone(phone)}（15 分钟内有效）。\n"
             f"收到后发送：/banbu code <验证码>{extra}"

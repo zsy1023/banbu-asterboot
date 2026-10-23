@@ -199,6 +199,18 @@ class TestPublishSize(unittest.TestCase):
             "CHANGELOG 里应有当前版本号的条目",
         )
 
+    def test_requirements_declares_curl_cffi(self):
+        """curl_cffi 是硬依赖：缺了它发码会被 Cloudflare 挂到 504 且短信不下发。"""
+        text = read(os.path.join(_ROOT, "requirements.txt"))
+        active = [
+            line.strip() for line in text.splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        ]
+        self.assertTrue(
+            any(line.startswith("curl_cffi") for line in active),
+            f"requirements.txt 必须声明 curl_cffi（当前生效行：{active}）",
+        )
+
     def test_package_under_market_limit(self):
         total = 0
         for base, dirs, files in os.walk(_ROOT):

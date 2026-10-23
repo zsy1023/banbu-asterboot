@@ -3,6 +3,25 @@
 本项目的版本号与 `metadata.yaml` 的 `version` 保持一致（语义化版本，不带 `v` 前缀）。
 每个版本对应的 git tag 为 `v<version>`。
 
+## 0.1.3
+
+**修复：收到 504 且短信没下发（curl_cffi 漏装）**
+
+- 现象：`/banbu bind` 返回「验证码已发送」，但手机一直收不到短信；日志里 `HTTP 504`
+- 根因：拓竹云端在 Cloudflare 后面。`requirements.txt` 里把 `curl_cffi` 写成了注释（可选），
+  于是实际用的是裸 `requests`：请求挂到 Cloudflare 60s 超时返回 504，短信并未下发；
+  而代码按参考项目语义"发出去就算成功"，把这个失败吞掉了
+- 修复：
+  - `requirements.txt` 把 `curl_cffi>=0.6.0` 变成**真正生效的依赖**（插件加载时自动安装）
+  - `auth.send_sms` 与 `banbu-a1-Status-acquisition/auth.py` 的 `send_sms` 逐行对齐：
+    记录完整请求 URL、响应码、响应体前 200 字，显式 `session.close()`
+  - 新增分级提示：5xx 且未装 curl_cffi → 明确告知"短信大概率没下发 + 怎么装"；
+    5xx 且已装 → "上游超时，通常仍会到达，等 1 分钟再重发"
+  - 未装 curl_cffi 时在发码前就记一条 WARNING，不用等失败才发现
+- 新增 `tests/test_auth.py`（14 项）：发码成功/504 两种分支文案、CSRF 头与端点断言、
+  登录错误码 1/2 翻译、缺 accessToken、网络异常、uid 获取、两区端点差异
+- 新增合规断言：`requirements.txt` 必须声明 `curl_cffi`（已生效行，不是注释）
+
 ## 0.1.2
 
 **修复：一条日志把命令打挂（`Formatting field not found in record: 'plugin_tag'`）**

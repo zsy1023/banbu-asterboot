@@ -13,7 +13,7 @@
     <img src="https://img.shields.io/badge/AstrBot-Plugin-blue?style=flat-square" alt="AstrBot">
   </a>
   <img src="https://img.shields.io/badge/AstrBot-%3E%3D4.9.2-lightgrey?style=flat-square" alt="AstrBot Version">
-  <img src="https://img.shields.io/badge/version-0.1.2-green?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.1.3-green?style=flat-square" alt="Version">
   <a href="./LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0-green?style=flat-square" alt="License">
   </a>
@@ -270,7 +270,7 @@ LLM 每小时上限：20
 
 - **AstrBot 版本**：`>= 4.9.2`（用到插件数据目录 API 与 `add_llm_tools`，低于此版本会拒绝加载）
 - **支持平台**：aiocqhttp、Telegram、QQ 官方机器人、企微、飞书、钉钉、Discord、Slack
-- **额外依赖**：`paho-mqtt`、`requests`、`cryptography`；`curl_cffi` 可选
+- **额外依赖**：`paho-mqtt`、`requests`、`cryptography`、`curl_cffi`（后者是发码必需，插件管理器会自动安装）
 - **设备**：拓竹 A1（单台）。烘干箱 `3D-dryer-for-esp32-c3` 为二期，当前只有适配器骨架
 
 ### 已知边界
