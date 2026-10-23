@@ -1,0 +1,30 @@
+#!/bin/sh
+# 提交后自动推送到 origin（失败只提示，绝不影响这次提交）
+#
+# 用法：
+#   tools/install-hooks.ps1     # 安装（Windows）
+#   设置 BAMBU_NO_AUTOPUSH=1     # 临时关闭自动推送（例如离线提交）
+#
+# 代理：推送依赖仓库本地的 http.proxy 配置（git config http.proxy ...），
+# 这样不依赖当前 shell 的 HTTPS_PROXY 环境变量。
+
+if [ -n "$BAMBU_NO_AUTOPUSH" ]; then
+    exit 0
+fi
+
+branch=$(git symbolic-ref --short -q HEAD)
+if [ -z "$branch" ]; then
+    exit 0
+fi
+
+if ! git remote get-url origin >/dev/null 2>&1; then
+    exit 0
+fi
+
+if ! output=$(git push origin "$branch" --quiet 2>&1); then
+    echo ""
+    echo "⚠️  自动推送失败（提交本身已成功）。稍后手动重试："
+    echo "    git push origin $branch"
+    echo "$output" | sed 's/^/    /'
+fi
+exit 0

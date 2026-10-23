@@ -843,13 +843,19 @@ class DryerEsp32Adapter(DeviceAdapter):
 
 ### 17.1 仓库布局
 
-本工作区 `E:\asterboot-bambulabMQTT` 就是插件仓库根（`git init` 已初始化），插件本体在
-`astrbot_plugin_bambu_a1/`，文档与脚本在根目录：
+本工作区 `E:\asterboot-bambulabMQTT` 就是插件仓库根，远端为
+`https://github.com/zsy1023/banbu-asterboot.git`（`origin`；`main` 跟踪 `origin/main`）。
+插件本体在 `astrbot_plugin_bambu_a1/`，文档与工具在根目录：
 
 ```
-asterboot-bambulabMQTT/            ← git 仓库根
+asterboot-bambulabMQTT/            ← git 仓库根（origin: banbu-asterboot）
 ├── .gitignore
+├── .gitattributes
+├── README.md                      # 仓库首页：这是什么、怎么用、怎么自检
 ├── ARCHITECTURE.md                # 本文件
+├── tools/
+│   ├── install-hooks.ps1          # 安装/卸载"提交后自动推送"钩子
+│   └── git-hooks/post-commit
 └── astrbot_plugin_bambu_a1/       # 插件目录（整体拷到 AstrBot/data/plugins/ 即可用）
 ```
 
@@ -879,9 +885,25 @@ asterboot-bambulabMQTT/            ← git 仓库根
 
 ```powershell
 # 开发时用符号链接或直接拷贝到宿主插件目录，改完 reload 插件即可
-git clone <repo> AstrBot/data/plugins/astrbot_plugin_bambu_a1
+git clone https://github.com/zsy1023/banbu-asterboot.git
 # 需要试错时另开分支，别在 main 上堆未验证的实验代码
 ```
+
+### 17.6 提交即推送（实时同步到远端）
+
+本仓库装了 `post-commit` 钩子：**每次 commit 完立即 `git push origin <当前分支>`**，
+推送失败只打印提示、不影响提交本身（离线也能正常提交，事后补推）。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\install-hooks.ps1            # 安装
+powershell -ExecutionPolicy Bypass -File tools\install-hooks.ps1 -Uninstall # 卸载
+$env:BAMBU_NO_AUTOPUSH=1     # 单次提交跳过自动推送（例如临时 WIP）
+```
+
+- 钩子只在本地 `.git/hooks/` 生效，不随仓库分发，换机器需重跑安装脚本。
+- 推送依赖仓库本地代理配置：`git config http.proxy http://127.0.0.1:7897`（不需要就 `--unset`）。
+- 钩子脚本保持 **纯 ASCII**：Windows PowerShell 5.1 会把无 BOM 的 UTF-8 当 ANSI 读，
+  非 ASCII 字面量会直接语法错误。
 
 ---
 
