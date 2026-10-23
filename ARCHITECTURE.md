@@ -184,9 +184,11 @@ banbu-asterboot/               ← 仓库根 == 插件包根（AstrBot 只认包
 │                              #   astrbot_version/social_link/tags/support_platforms
 ├── _conf_schema.json          # WebUI 可视化配置（第 11 节）
 ├── requirements.txt           # paho-mqtt, requests, cryptography, curl_cffi(可选)
-├── README.md                  # 市场首页：安装、绑定、命令、配置、自检
+├── README.md                  # 市场首页：居中 banner + 徽章 + 折叠章节
+├── CHANGELOG.md               # 更新日志（版本与 metadata.version 对齐）
 ├── LICENSE                    # GPL-3.0（与作者另两个仓库一致）
-├── logo.png                   # 256×256 插件图标
+├── logo.png                   # 256×256 像素风图标（tools/make_logo.py 生成）
+├── banner.png                 # 1280×320 README 顶部图（tools/make_banner.py 生成）
 ├── main.py                    # Star 子类：装配 + 命令 + LLM 工具 + 生命周期（薄）
 ├── .astrbot-plugin/i18n/      # 插件国际化（宿主约定的目录名）
 │   ├── zh-CN.json
@@ -227,6 +229,8 @@ banbu-asterboot/               ← 仓库根 == 插件包根（AstrBot 只认包
 │
 ├── tools/                     # 开发脚本，不随插件包分发
 │   ├── install-hooks.ps1
+│   ├── make_logo.py           # 生成 logo.png（--preview 打 ASCII 网格）
+│   ├── make_banner.py         # 生成 banner.png（5×7 像素字体内置）
 │   └── git-hooks/post-commit
 └── ARCHITECTURE.md            # 本文件（不随插件包分发）
 ```
@@ -928,7 +932,7 @@ $env:BAMBU_NO_AUTOPUSH=1     # 单次提交跳过自动推送（例如临时 WIP
 
 | 里程碑 | 内容 | 验证方式 |
 |---|---|---|
-| M1 骨架 | `metadata.yaml`、`_conf_schema.json`（23 项）、协议档案 `a1_v1`、`store`（原子写/轮转）、`compat`（字段映射/漂移/端点表） | `test_core.TestStore` / `TestCompat` |
+| M1 骨架 | `metadata.yaml`、`_conf_schema.json`（25 项）、协议档案 `a1_v1`、`store`（原子写/轮转）、`compat`（字段映射/漂移/端点表） | `test_core.TestStore` / `TestCompat` |
 | M2 绑定 | AES-256-GCM + 机器盐、发码/登录/换 uid/列举设备、`/banbu bind\|code\|sn\|devices\|unbind` | `TestCredentials` + 冒烟测试 `test_bind_flow_encrypts_token`（断言明文不落盘） |
 | M3 监控 | MQTT poll + stream（增量深合并）、`monitor` 自动降级/退避/静默判离线、`events` 检测与去重、13 种规则 | `TestEventDetect` / `TestEventStateDedup` / `TestRules` |
 | M4 直推 | `router` 三级优先级 + 总闸、`coalescer` 合并窗口、`render` 模板、`push` 订阅者/安静时段、8 个钩子 | `TestRouter` / `TestCoalescer` / `TestRender` / `TestQuietHours` |
@@ -991,8 +995,8 @@ $env:BAMBU_NO_AUTOPUSH=1     # 单次提交跳过自动推送（例如临时 WIP
 |---|---|
 | 体积 | 约 90 KB（上限 16 MB） |
 | 文件数 | 39 |
-| 包根内容 | `metadata.yaml`、`main.py`、`_conf_schema.json`、`requirements.txt`、`bambu_a1/`、`.astrbot-plugin/`、`README.md`、`LICENSE`、`logo.png` |
-| 已排除 | `tests/`、`tools/`、`ARCHITECTURE.md`（`.gitattributes` 的 `export-ignore` 生效） |
+| 包根内容 | `metadata.yaml`、`main.py`、`_conf_schema.json`、`requirements.txt`、`bambu_a1/`、`.astrbot-plugin/`、`README.md`、`CHANGELOG.md`、`ARCHITECTURE.md`、`LICENSE`、`logo.png`、`banner.png` |
+| 已排除 | `tests/`、`tools/`、`.gitignore`（`.gitattributes` 的 `export-ignore` 生效） |
 
 ### 19.3 发布前仍需人工确认
 

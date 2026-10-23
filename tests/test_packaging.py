@@ -174,6 +174,31 @@ class TestMetadata(unittest.TestCase):
 
 
 class TestPublishSize(unittest.TestCase):
+    def test_readme_relative_links_resolve(self):
+        """README 里指向仓库内文件的相对链接必须存在（市场页会直接展示 README）。"""
+        text = read(os.path.join(_ROOT, "README.md"))
+        targets = re.findall(r"\]\(\./([^)#]+)\)", text)
+        self.assertTrue(targets, "README 里没有相对链接？")
+        missing = [t for t in targets if not os.path.exists(os.path.join(_ROOT, t))]
+        self.assertFalse(missing, f"README 里有指向不存在文件的链接：{missing}")
+
+    def test_readme_has_expected_sections(self):
+        """README 是对外门面，关键章节不能丢。"""
+        text = read(os.path.join(_ROOT, "README.md"))
+        for keyword in ("安装", "命令", "配置", "兼容性", "许可证"):
+            self.assertIn(keyword, text, f"README 缺少「{keyword}」相关内容")
+
+    def test_changelog_version_matches_metadata(self):
+        if yaml is None:
+            self.skipTest("需要 PyYAML")
+        metadata = yaml.safe_load(read(os.path.join(_ROOT, "metadata.yaml")))
+        changelog = read(os.path.join(_ROOT, "CHANGELOG.md"))
+        self.assertIn(
+            f"## {metadata['version']}",
+            changelog,
+            "CHANGELOG 里应有当前版本号的条目",
+        )
+
     def test_package_under_market_limit(self):
         total = 0
         for base, dirs, files in os.walk(_ROOT):
