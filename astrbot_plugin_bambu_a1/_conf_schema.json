@@ -1,0 +1,173 @@
+{
+  "enabled": {
+    "description": "插件总开关",
+    "type": "bool",
+    "default": true
+  },
+  "region": {
+    "description": "拓竹账号区域（收码区域与登录区域必须一致）",
+    "type": "string",
+    "options": ["China", "Global"],
+    "labels": ["中国区 (bambulab.cn)", "国际区 (bambulab.com)"],
+    "default": "China"
+  },
+  "protocol_profile": {
+    "description": "协议档案",
+    "hint": "云端改字段时优先换档案，不用改代码。",
+    "type": "string",
+    "options": ["a1_v1"],
+    "default": "a1_v1"
+  },
+  "protocol_overrides": {
+    "description": "协议档案覆盖（深合并到档案）",
+    "hint": "例如 {\"fields\": {\"percent\": {\"paths\": [\"print.percent_v2\"]}}}，用于云端临时改名时打补丁。",
+    "type": "dict",
+    "items": {},
+    "default": {}
+  },
+  "serial": {
+    "description": "打印机序列号",
+    "hint": "也可以聊天里发送 /banbu sn <序列号> 绑定。",
+    "type": "string",
+    "default": ""
+  },
+  "secret_key": {
+    "description": "凭据主密钥",
+    "hint": "留空则首次绑定时自动生成并回写。它参与 AES-GCM 密钥派生，修改后需要重新 /banbu bind。",
+    "type": "string",
+    "secret": true,
+    "default": ""
+  },
+  "monitor_mode": {
+    "description": "监控通道",
+    "type": "string",
+    "options": ["auto", "stream", "poll"],
+    "labels": ["自动（长连接优先，失败降级轮询）", "长连接（低延迟）", "轮询（最稳）"],
+    "default": "auto"
+  },
+  "poll_interval": {
+    "description": "轮询间隔（秒）",
+    "type": "int",
+    "default": 30,
+    "slider": {"min": 10, "max": 300, "step": 5}
+  },
+  "stale_after": {
+    "description": "无报文判离线（秒）",
+    "type": "int",
+    "default": 90,
+    "slider": {"min": 30, "max": 900, "step": 10}
+  },
+  "auto_start": {
+    "description": "启动时自动开始监控",
+    "type": "bool",
+    "default": true
+  },
+  "push_targets": {
+    "description": "额外推送目标（umo）",
+    "hint": "默认推给绑定会话，一般不用填。多会话请在对应会话里发 /banbu subscribe。",
+    "type": "list",
+    "default": []
+  },
+  "quiet_hours_enabled": {
+    "description": "启用安静时段",
+    "hint": "关闭时完全不生效；开启时安静时段内只推送 critical 事件。",
+    "type": "bool",
+    "default": false
+  },
+  "quiet_hours": {
+    "description": "安静时段区间",
+    "type": "string",
+    "default": "23:00-07:30"
+  },
+  "progress_milestones": {
+    "description": "进度里程碑（%）",
+    "type": "list",
+    "default": [25, 50, 75, 90]
+  },
+  "merge_window_s": {
+    "description": "合并窗口（秒）",
+    "hint": "窗口内的事件与模型解释会合成一条消息发出；设为 0 关闭合并、逐条即时发。",
+    "type": "int",
+    "default": 3,
+    "slider": {"min": 0, "max": 15, "step": 1}
+  },
+  "merge_critical_window_s": {
+    "description": "critical 事件合并窗口（秒）",
+    "type": "float",
+    "default": 0.8,
+    "slider": {"min": 0, "max": 10, "step": 0.2}
+  },
+  "llm_mode": {
+    "description": "LLM 总闸",
+    "type": "string",
+    "options": ["off", "summary_only", "full"],
+    "labels": ["关闭（全部模板直推）", "仅复盘与问答", "完整（含诊断与摘要）"],
+    "default": "summary_only"
+  },
+  "llm_route": {
+    "description": "LLM 分界线（事件 → direct/llm/both）",
+    "hint": "direct=模板直推；llm=模型补写后与事实合并成一条；both=两条都发。留空则用内置默认值。",
+    "type": "dict",
+    "items": {},
+    "default": {}
+  },
+  "llm_provider_id": {
+    "description": "LLM 供应商",
+    "hint": "留空使用当前会话默认供应商。",
+    "type": "string",
+    "_special": "select_provider",
+    "default": ""
+  },
+  "llm_timeout": {
+    "description": "LLM 超时（秒）",
+    "type": "int",
+    "default": 20,
+    "slider": {"min": 5, "max": 120, "step": 5}
+  },
+  "llm_budget_per_hour": {
+    "description": "LLM 每小时调用上限",
+    "hint": "超出后本次事件退回模板直推，不影响告警送达。",
+    "type": "int",
+    "default": 12,
+    "slider": {"min": 0, "max": 120, "step": 1}
+  },
+  "mqtt_timeout": {
+    "description": "MQTT 单次超时（秒）",
+    "type": "int",
+    "default": 15
+  },
+  "mqtt_retries": {
+    "description": "MQTT 失败重试次数",
+    "type": "int",
+    "default": 2
+  },
+  "log_level": {
+    "description": "日志级别",
+    "type": "string",
+    "options": ["DEBUG", "INFO", "WARNING", "ERROR"],
+    "default": "INFO"
+  },
+  "dryer": {
+    "description": "烘干箱（二期）",
+    "type": "object",
+    "hint": "本期未实现，仅保留接口与配置位。",
+    "items": {
+      "enabled": {
+        "description": "启用烘干箱",
+        "type": "bool",
+        "default": false
+      },
+      "require_confirm": {
+        "description": "联动需二次确认",
+        "hint": "关闭后 A1 打印完成会按规则直接开始烘干，不再询问。",
+        "type": "bool",
+        "default": true
+      },
+      "ws_url": {
+        "description": "烘干箱 WebSocket 地址",
+        "type": "string",
+        "default": ""
+      }
+    }
+  }
+}

@@ -1,0 +1,104 @@
+{
+  "profile": "a1_v1",
+  "description": "拓竹 A1 / 云端 + MQTT 协议档案。云端改名时改这里，不用改 Python。",
+  "endpoints": {
+    "China": {
+      "api_base": "https://api.bambulab.cn",
+      "sms_base": "https://bambulab.cn",
+      "login_path": "/v1/user-service/user/login",
+      "preference_path": "/v1/design-user-service/my/preference",
+      "sms_path": "/api/v1/user-service/user/sendsmscode",
+      "csrf_path": "/api/csrf",
+      "bind_list_path": "/v1/iot-service/api/user/bind"
+    },
+    "Global": {
+      "api_base": "https://api.bambulab.com",
+      "sms_base": "https://bambulab.cn",
+      "login_path": "/v1/user-service/user/login",
+      "preference_path": "/v1/design-user-service/my/preference",
+      "sms_path": "/api/v1/user-service/user/sendsmscode",
+      "csrf_path": "/api/csrf",
+      "bind_list_path": "/v1/iot-service/api/user/bind"
+    }
+  },
+  "mqtt": {
+    "broker": "cn.mqtt.bambulab.com",
+    "broker_global": "us.mqtt.bambulab.com",
+    "port": 8883,
+    "tls_insecure": true,
+    "topic_report": "device/{serial}/report",
+    "topic_request": "device/{serial}/request",
+    "cmd_start_push": {"pushing": {"sequence_id": "1", "command": "start"}},
+    "cmd_push_all": {"pushing": {"sequence_id": "1", "command": "pushall"}},
+    "cmd_light_on": {"system": {"command": "ledctrl", "led_node": "chamber_light", "led_mode": "on"}},
+    "cmd_light_off": {"system": {"command": "ledctrl", "led_node": "chamber_light", "led_mode": "off"}},
+    "cmd_pause": {"print": {"sequence_id": "2", "command": "pause"}},
+    "cmd_resume": {"print": {"sequence_id": "2", "command": "resume"}},
+    "cmd_stop": {"print": {"sequence_id": "2", "command": "stop"}}
+  },
+  "states": {
+    "IDLE": "idle",
+    "PREPARE": "prepare",
+    "RUNNING": "printing",
+    "PAUSE": "paused",
+    "FINISH": "finished",
+    "FAILED": "failed",
+    "SLICING": "slicing"
+  },
+  "fields": {
+    "state_raw": {"paths": ["print.gcode_state"], "cast": "str"},
+    "percent": {"paths": ["print.mc_percent"], "cast": "int"},
+    "layer": {"paths": ["print.layer_num"], "cast": "int"},
+    "total_layers": {"paths": ["print.total_layer_num"], "cast": "int"},
+    "remaining_min": {"paths": ["print.mc_remaining_time"], "cast": "int"},
+    "elapsed_min": {"paths": ["print.mc_print_time"], "cast": "int"},
+    "total_min": {"paths": ["print.mc_print_total_time", "print.total_print_time"], "cast": "int"},
+    "nozzle": {"paths": ["print.nozzle_temper"], "cast": "float"},
+    "nozzle_target": {"paths": ["print.nozzle_target_temper"], "cast": "float"},
+    "bed": {"paths": ["print.bed_temper"], "cast": "float"},
+    "bed_target": {"paths": ["print.bed_target_temper"], "cast": "float"},
+    "chamber": {"paths": ["print.chamber_temper"], "cast": "float"},
+    "task_name": {"paths": ["print.subtask_name"], "cast": "str"},
+    "task_id": {"paths": ["print.task_id", "print.subtask_id", "print.job_id"], "cast": "str"},
+    "speed": {"paths": ["print.spd_mag"], "cast": "int"},
+    "light": {"paths": ["print.lights_report.0.mode"], "cast": "str"},
+    "wifi": {"paths": ["print.wifi_signal"], "cast": "str"},
+    "stage": {"paths": ["print.stg_cur", "print.stage"], "cast": "int"},
+    "print_error": {"paths": ["print.print_error"], "cast": "int"},
+    "fan_cooling": {"paths": ["print.cooling_fan_speed"], "cast": "pct_fan"},
+    "fan_heatbreak": {"paths": ["print.heatbreak_fan_speed"], "cast": "pct_fan"},
+    "fan_big1": {"paths": ["print.big_fan1_speed"], "cast": "pct_fan"},
+    "fan_big2": {"paths": ["print.big_fan2_speed"], "cast": "pct_fan"}
+  },
+  "state_fields_declared": [
+    "print.gcode_state", "print.mc_percent", "print.layer_num", "print.total_layer_num",
+    "print.mc_remaining_time", "print.mc_print_time", "print.mc_print_total_time",
+    "print.nozzle_temper", "print.nozzle_target_temper", "print.bed_temper",
+    "print.bed_target_temper", "print.chamber_temper", "print.subtask_name",
+    "print.task_id", "print.spd_mag", "print.lights_report", "print.wifi_signal",
+    "print.stg_cur", "print.print_error", "print.ams", "print.vtray", "print.hms"
+  ],
+  "pause_reasons": {
+    "manual_pause": "用户手动暂停",
+    "filament_runout": "耗材用尽（断料）",
+    "gcode_pause": "G-code 指令暂停",
+    "lost_step": "丢步 / 定位异常",
+    "hms_error": "设备故障（HMS）",
+    "device_error": "设备故障",
+    "unknown": "原因未知"
+  },
+  "stage_pause_reasons": {
+    "16": "manual_pause",
+    "30": "gcode_pause"
+  },
+  "hms_modules": {
+    "3": "x_axis",
+    "4": "y_axis",
+    "5": "z_axis",
+    "6": "extruder",
+    "7": "bed",
+    "8": "ams",
+    "9": "toolhead",
+    "255": "unknown"
+  }
+}

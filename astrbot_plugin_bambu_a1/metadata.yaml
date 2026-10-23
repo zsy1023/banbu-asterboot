@@ -1,0 +1,19 @@
+name: astrbot_plugin_bambu_a1
+desc: 拓竹 A1 打印机状态监控：绑定拓竹账号后后台盯 MQTT，状态变化主动推送，可配置哪些消息过 LLM。
+version: v0.1.0
+author: zsy1023
+repo: https://github.com/zsy1023/astrbot_plugin_bambu_a1
+display_name: 拓竹 A1 状态助手
+short_desc: 后台监控拓竹 A1，打印完成/暂停/断料第一时间推给你
+astrbot_version: ">=4.9.2"
+support_platforms:
+  - aiocqhttp
+  - telegram
+  - qq_official
+  - qq_official_webhook
+  - wecom
+  - lark
+  - dingtalk
+  - discord
+  - slack
+  - webchat

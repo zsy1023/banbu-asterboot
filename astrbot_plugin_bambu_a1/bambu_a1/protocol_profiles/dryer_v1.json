@@ -1,0 +1,36 @@
+{
+  "profile": "dryer_v1",
+  "description": "3D 烘干箱（ESP32-C3）协议档案占位。二期实现，当前只登记契约。",
+  "endpoints": {
+    "lan": {
+      "ws_url": "",
+      "tcp_port": 8080,
+      "http_status_path": "/api/status",
+      "http_control_path": "/api/control",
+      "http_manual_path": "/api/manual"
+    }
+  },
+  "tcp_commands": [
+    "STATUS", "START", "STOP", "SETTEMP", "SETTIME",
+    "MANUAL", "HEATER", "FAN", "SINGLESENSOR", "RESTART", "AUTH"
+  ],
+  "fields": {
+    "chamber": {"paths": ["boxTemp"], "cast": "float"},
+    "heater_temp": {"paths": ["heaterTemp"], "cast": "float"},
+    "state_raw": {"paths": ["state"], "cast": "str"},
+    "target_temp": {"paths": ["targetTemp"], "cast": "float"},
+    "dry_time": {"paths": ["dryTime"], "cast": "int"},
+    "remaining_min": {"paths": ["remaining"], "cast": "int", "scale": 0.0166666667},
+    "heater_on": {"paths": ["heater"], "cast": "int"},
+    "fan_on": {"paths": ["fan"], "cast": "int"},
+    "fault": {"paths": ["fault"], "cast": "int"},
+    "manual": {"paths": ["manual"], "cast": "int"},
+    "single_sensor": {"paths": ["singleSensor"], "cast": "int"}
+  },
+  "states": {
+    "STANDBY": "idle",
+    "DRYING": "drying",
+    "COOLING": "cooling"
+  },
+  "event_types": ["drying_started", "drying_done", "overheat", "sensor_fault", "cooling"]
+}
