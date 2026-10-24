@@ -46,6 +46,16 @@ SEP = f"\n\n{RULE}\n\n"
 DIVIDER = RULE
 TASK_NAME_MAX = 16
 LABEL_PAD = "　"  # 全角空格：让 2 字标签与 3 字标签视觉对齐
+TEMP_BAR_WIDTH = 8
+
+# 状态卡顶部的小打印机（4 行像素图）。只用方块字符与半角空格，
+# 不含 CJK，所以在等宽与非等宽字体下都能对齐。
+PRINTER_ART = (
+    "▄▄▄▄▄▄▄▄▄▄▄▄▄▄",
+    "█  ▄▄▄▄▄▄▄▄  █",
+    "█  ████████  █",
+    "█▄▄▄▄▄▄▄▄▄▄▄▄█",
+)
 
 # 事件标题前的几何字形。刻意避开 Unicode emoji 区段：
 #   ▸(25B8) ‖(2016) ✓(2713) ✕(2715) ◆(25C6) ▲(25B2) ⊘(2298) ◉(25C9) ▰(25B0)
@@ -120,6 +130,23 @@ def fmt_temp(pairs: list[tuple[str, float | None, float | None]]) -> str:
         else:
             parts.append(f"{name} {current:.0f}°C")
     return " · ".join(parts)
+
+
+def temp_bar(current: float | None, target: float | None, width: int = TEMP_BAR_WIDTH) -> str | None:
+    """温度小进度条：▰▰▰▰▰▰▱▱ 215/215°C。
+
+    - 有目标温度：按 current/target 填充（超过目标按满格算，正在升温时是半格）
+    - 无目标温度（如腔体）：只显示数值，不画没有意义的空条
+    """
+    if current is None:
+        return None
+    if not target or target <= 0:
+        return f"{current:.0f}°C"
+    ratio = max(0.0, min(1.0, float(current) / float(target)))
+    filled = int(round(ratio * width))
+    filled = max(0, min(width, filled))
+    bar = "▰" * filled + "▱" * (width - filled)
+    return f"{bar} {current:.0f}/{target:.0f}°C"
 
 
 def kv(label: str, value: Any) -> str | None:
@@ -318,14 +345,21 @@ def render_status(
         )
 
     lines = card_head(device_name, STATE_LABEL.get(snap.state, snap.state))
-    if snap.task_name:
-        lines.append(kv("任务", truncate(snap.task_name, 24)) or "")
+    # 小打印机放在卡片头下面，作为视觉标识（纯方块字符，不含 CJK）
+    lines.extend(PRINTER_ART)
+    lines.append("")
 
+    def add(label: str, value: Any) -> None:
+        line = kv(label, value)
+        if line:
+            lines.append(line)
+
+    add("任务", truncate(snap.task_name, 24) if snap.task_name else None)
     if snap.percent is not None:
-        lines.append(kv("进度", f"{progress_bar(snap.percent)} {snap.percent}%") or "")
+        add("进度", f"{progress_bar(snap.percent)} {snap.percent}%")
     if snap.layer:
         total = f"/{snap.total_layers}" if snap.total_layers else ""
-        lines.append(kv("层次", f"{snap.layer}{total}") or "")
+        add("层次", f"{snap.layer}{total}")
 
     time_bits = []
     # 0 / 负数没有信息量：FINISH 时 mc_remaining_time 就是 0，显示"剩 0 分钟"会误导
@@ -334,15 +368,13 @@ def render_status(
     if snap.remaining_min and snap.remaining_min > 0:
         time_bits.append(f"剩 {fmt_minutes(snap.remaining_min)}")
     if time_bits:
-        lines.append(kv("时间", " · ".join(time_bits)) or "")
+        add("时间", " · ".join(time_bits))
 
-    temp_line = fmt_temp([
-        ("喷头", snap.nozzle, snap.nozzle_target),
-        ("热床", snap.bed, snap.bed_target),
-        ("腔体", snap.chamber, None),
-    ])
-    if temp_line:
-        lines.append(kv("温度", temp_line) or "")
+    # 喷头/热床各一条小进度条，腔体没有目标温度就只给数值
+    add("喷头", temp_bar(snap.nozzle, snap.nozzle_target))
+    add("热床", temp_bar(snap.bed, snap.bed_target))
+    if snap.chamber is not None:
+        add("腔体", f"{snap.chamber:.0f}°C")
 
     trays = []
     for unit in snap.ams:
@@ -358,7 +390,7 @@ def render_status(
             bit += f" {snap.vtray['remain']}%"
         trays.append(bit)
     if trays:
-        lines.append(kv("耗材", " · ".join(trays[:4])) or "")
+        add("耗材", " · ".join(trays[:4]))
 
     bits = []
     if snap.light:
@@ -370,11 +402,16 @@ def render_status(
     if state_age_s is not None:
         bits.append(f"{state_age_s} 秒前更新")
     if bits:
-        lines.append(kv("设备", " · ".join(bits)) or "")
+        add("设备", " · ".join(bits))
 
     for line in extra_lines or []:
-        lines.append(line)
-    return "\n".join(line for line in lines if line)
+        if line:
+            lines.append(line)
+
+    # 只去掉尾部空行；中间的空白（像素图后那一行）要保留
+    while lines and not lines[-1]:
+        lines.pop()
+    return "\n".join(lines)
 
 
 def render_rule_list(rules: list[Any]) -> str:

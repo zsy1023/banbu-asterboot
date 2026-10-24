@@ -13,7 +13,7 @@
     <img src="https://img.shields.io/badge/AstrBot-Plugin-blue?style=flat-square" alt="AstrBot">
   </a>
   <img src="https://img.shields.io/badge/AstrBot-%3E%3D4.9.2-lightgrey?style=flat-square" alt="AstrBot Version">
-  <img src="https://img.shields.io/badge/version-0.1.6-green?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.1.7-green?style=flat-square" alt="Version">
   <a href="./LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0-green?style=flat-square" alt="License">
   </a>
@@ -64,6 +64,30 @@ MQTT 长连接优先（秒级），连接不稳时自动降级为轮询（默认
 >
 > 换好料后发送 /banbu resume 继续
 > ```
+
+`/banbu status` 的状态卡带一张 4 行小打印机像素图和两条温度小进度条：
+
+```
+拓竹 A1 · 打印中
+━━━━━━━━━━━━━━━━━━━━
+▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+█  ▄▄▄▄▄▄▄▄  █
+█  ████████  █
+█▄▄▄▄▄▄▄▄▄▄▄▄█
+
+任务　多功能PCB测试工作台_万向蛇管机械臂_多探针…
+进度　███░░░░░░░░░ 25%
+层次　20/91
+时间　已 1 小时 2 分 · 剩 3 小时 54 分
+喷头　▰▰▰▰▰▰▰▰ 215/215°C
+热床　▰▰▰▰▱▱▱▱ 30/60°C
+腔体　32°C
+耗材　PLA 78%
+设备　灯 开 · 信号 -52dBm · 12 秒前更新
+```
+
+温度条按 `当前/目标` 填充：升温时是半格，到温满格，超温也按满格显示；
+腔体没有目标温度，就只给数值不画空条。
 
 ### 4. 13 种提醒规则
 层数到达、进度百分比、剩余时间、已打印时长、喷头/热床/腔温上下限、温度区间、
