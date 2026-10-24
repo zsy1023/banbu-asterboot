@@ -13,7 +13,7 @@
     <img src="https://img.shields.io/badge/AstrBot-Plugin-blue?style=flat-square" alt="AstrBot">
   </a>
   <img src="https://img.shields.io/badge/AstrBot-%3E%3D4.9.2-lightgrey?style=flat-square" alt="AstrBot Version">
-  <img src="https://img.shields.io/badge/version-0.1.7-green?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.1.8-green?style=flat-square" alt="Version">
   <a href="./LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0-green?style=flat-square" alt="License">
   </a>
@@ -76,7 +76,7 @@ MQTT 长连接优先（秒级），连接不稳时自动降级为轮询（默认
 █▄▄▄▄▄▄▄▄▄▄▄▄█
 
 任务　多功能PCB测试工作台_万向蛇管机械臂_多探针…
-进度　███░░░░░░░░░ 25%
+进度　▏███░░░░░░░░░▕ 25%
 层次　20/91
 时间　已 1 小时 2 分 · 剩 3 小时 54 分
 喷头　▰▰▰▰▰▰▰▰ 215/215°C
@@ -86,8 +86,15 @@ MQTT 长连接优先（秒级），连接不稳时自动降级为轮询（默认
 设备　灯 开 · 信号 -52dBm · 12 秒前更新
 ```
 
-温度条按 `当前/目标` 填充：升温时是半格，到温满格，超温也按满格显示；
-腔体没有目标温度，就只给数值不画空条。
+细节都是按状态自适应的：
+
+- **像素图**：打印/暂停时台面上有件（`████████`），空闲/完成/失败时台面留白
+- **进度条**带端点 `▏…▕`，像仪表刻度
+- **温度条**按 `当前/目标` 填充：升温半格、到温满格、超温按满格（clamp）；
+  腔体没有目标温度就只给数值，不画空条
+- **空闲/完成且进度为 0** 时不显示进度行（避免"进度 0%"这种废话），100% 会保留
+- **底部提示**按状态给下一步：暂停 → `/banbu resume`，失败 → `/banbu protocol`，
+  离线 → 检查网络；打印中不打扰
 
 ### 4. 13 种提醒规则
 层数到达、进度百分比、剩余时间、已打印时长、喷头/热床/腔温上下限、温度区间、

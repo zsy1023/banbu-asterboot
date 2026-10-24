@@ -50,12 +50,34 @@ TEMP_BAR_WIDTH = 8
 
 # 状态卡顶部的小打印机（4 行像素图）。只用方块字符与半角空格，
 # 不含 CJK，所以在等宽与非等宽字体下都能对齐。
-PRINTER_ART = (
-    "▄▄▄▄▄▄▄▄▄▄▄▄▄▄",
-    "█  ▄▄▄▄▄▄▄▄  █",
-    "█  ████████  █",
-    "█▄▄▄▄▄▄▄▄▄▄▄▄█",
-)
+#   行0 顶梁 / 行1 打印头 / 行2 正在成型的物件 / 行3 热床
+_ART_TOP = ("▄" * 14, "█  ▄▄▄▄▄▄▄▄  █")
+_ART_OBJECT = "█  ████████  █"
+_ART_EMPTY = "█            █"
+_ART_BED = "█▄▄▄▄▄▄▄▄▄▄▄▄█"
+
+#: 兼容旧引用（等价于"正在打印"的样子）
+PRINTER_ART = (_ART_TOP[0], _ART_TOP[1], _ART_OBJECT, _ART_BED)
+
+#: 这些状态下打印台上没有东西，"物件"那一行留白
+_IDLE_STATES = {"idle", "finished", "failed", "unknown"}
+
+
+def printer_art(state: str = "printing") -> tuple[str, str, str, str]:
+    """按状态给像素图：打印中台上有件，空闲/完成/失败时台面是空的。"""
+    body = _ART_EMPTY if state in _IDLE_STATES else _ART_OBJECT
+    return (_ART_TOP[0], _ART_TOP[1], body, _ART_BED)
+
+
+#: 状态卡底部的"下一步"提示（能做什么，比单纯报状态有用）
+STATE_HINT = {
+    "paused": "发送 /banbu resume 继续打印",
+    "failed": "发 /banbu protocol 看诊断，/banbu digest 看最近事件",
+    "offline": "检查供电与网络，恢复后会自动通知",
+}
+
+#: 这些状态下进度为 0 没有信息量，状态卡里省略该行
+_HIDE_ZERO_PROGRESS_STATES = {"idle", "finished", "failed", "unknown"}
 
 # 事件标题前的几何字形。刻意避开 Unicode emoji 区段：
 #   ▸(25B8) ‖(2016) ✓(2713) ✕(2715) ◆(25C6) ▲(25B2) ⊘(2298) ◉(25C9) ▰(25B0)
@@ -114,10 +136,11 @@ def truncate(text: str | None, limit: int = TASK_NAME_MAX) -> str:
 
 
 def progress_bar(percent: int | float | None, width: int = 12) -> str:
+    """进度条带端点，像仪表：`▏███░░░░░░░░▕ 25%`。"""
     if percent is None:
-        return "░" * width
+        return "▏" + "░" * width + "▕"
     filled = max(0, min(width, round(float(percent) / 100 * width)))
-    return "█" * filled + "░" * (width - filled)
+    return "▏" + "█" * filled + "░" * (width - filled) + "▕"
 
 
 def fmt_temp(pairs: list[tuple[str, float | None, float | None]]) -> str:
@@ -346,7 +369,7 @@ def render_status(
 
     lines = card_head(device_name, STATE_LABEL.get(snap.state, snap.state))
     # 小打印机放在卡片头下面，作为视觉标识（纯方块字符，不含 CJK）
-    lines.extend(PRINTER_ART)
+    lines.extend(printer_art(snap.state))
     lines.append("")
 
     def add(label: str, value: Any) -> None:
@@ -355,7 +378,10 @@ def render_status(
             lines.append(line)
 
     add("任务", truncate(snap.task_name, 24) if snap.task_name else None)
-    if snap.percent is not None:
+    show_progress = snap.percent is not None and not (
+        snap.percent == 0 and snap.state in _HIDE_ZERO_PROGRESS_STATES
+    )
+    if show_progress:
         add("进度", f"{progress_bar(snap.percent)} {snap.percent}%")
     if snap.layer:
         total = f"/{snap.total_layers}" if snap.total_layers else ""
@@ -407,6 +433,12 @@ def render_status(
     for line in extra_lines or []:
         if line:
             lines.append(line)
+
+    # "下一步能做什么"：比单纯报状态更有用
+    hint = STATE_HINT.get(snap.state)
+    if hint:
+        lines.append("")
+        lines.append(hint)
 
     # 只去掉尾部空行；中间的空白（像素图后那一行）要保留
     while lines and not lines[-1]:

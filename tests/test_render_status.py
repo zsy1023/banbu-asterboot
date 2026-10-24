@@ -61,6 +61,61 @@ class TestPrinterArt(unittest.TestCase):
         self.assertIn("暂无数据", text)
         self.assertNotIn(render.PRINTER_ART[1], text)
 
+    def test_art_changes_with_state(self):
+        """打印时台上有件，空闲/完成/失败时台面是空的。"""
+        self.assertEqual(render.printer_art("printing"), render.PRINTER_ART)
+        self.assertEqual(render.printer_art("paused"), render.PRINTER_ART)
+        idle_art = render.printer_art("idle")
+        self.assertNotEqual(idle_art, render.PRINTER_ART)
+        self.assertEqual(len(idle_art), 4)
+        for state in ("finished", "failed", "unknown"):
+            self.assertEqual(render.printer_art(state), idle_art)
+        widths = {display_width(line) for line in idle_art}
+        self.assertEqual(len(widths), 1, f"空闲态像素图各行不等宽：{widths}")
+
+    def test_idle_card_hides_zero_progress(self):
+        profile = load_profile("a1_v1")
+        text = render.render_status(profile.to_snapshot({"print": {"gcode_state": "IDLE", "mc_percent": 0}}))
+        self.assertNotIn("进度", text, "空闲时不该显示 0%")
+        self.assertNotIn("层次", text)
+
+    def test_finished_card_keeps_100_percent(self):
+        profile = load_profile("a1_v1")
+        text = render.render_status(profile.to_snapshot({"print": {"gcode_state": "FINISH", "mc_percent": 100}}))
+        self.assertIn("100%", text)
+
+
+class TestStatusHints(unittest.TestCase):
+    def test_paused_card_suggests_resume(self):
+        profile = load_profile("a1_v1")
+        text = render.render_status(profile.to_snapshot({"print": {"gcode_state": "PAUSE", "mc_percent": 47}}))
+        self.assertIn("/banbu resume", text)
+
+    def test_failed_card_suggests_diagnostics(self):
+        profile = load_profile("a1_v1")
+        text = render.render_status(profile.to_snapshot({"print": {"gcode_state": "FAILED"}}))
+        self.assertIn("/banbu protocol", text)
+
+    def test_printing_card_has_no_hint(self):
+        profile = load_profile("a1_v1")
+        text = render.render_status(profile.to_snapshot({"print": {"gcode_state": "RUNNING"}}))
+        self.assertFalse(text.rstrip().splitlines()[-1].startswith("/banbu"), text)
+
+
+class TestProgressBar(unittest.TestCase):
+    def test_has_endpoints(self):
+        bar = render.progress_bar(25)
+        self.assertTrue(bar.startswith("▏"), bar)
+        self.assertTrue(bar.endswith("▕"), bar)
+
+    def test_fill_ratio(self):
+        self.assertEqual(render.progress_bar(0), "▏" + "░" * 12 + "▕")
+        self.assertEqual(render.progress_bar(100), "▏" + "█" * 12 + "▕")
+        self.assertEqual(render.progress_bar(50).count("█"), 6)
+
+    def test_unknown_percent_is_all_empty(self):
+        self.assertEqual(render.progress_bar(None), "▏" + "░" * 12 + "▕")
+
 
 class TestTempBar(unittest.TestCase):
     def test_at_target_is_full(self):
