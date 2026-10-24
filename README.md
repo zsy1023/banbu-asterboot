@@ -186,6 +186,10 @@ git clone https://github.com/zsy1023/banbu-asterboot.git astrbot_plugin_bambu_a1
 | WebUI「从仓库安装」填上面的地址 | 可用，直接拉仓库最新代码 |
 | 手动 `git clone` / 拷目录进 `data/plugins/` | **不可用**（提示"无法检测更新"），需要先绑定安装源 |
 
+> **不需要先"上架插件市场"就能一键更新。** AstrBot 判定的是安装源类型
+> （`install_method` ∈ `market` / `repository`），只要是从仓库安装（或事后绑定仓库源），
+> 更新按钮就可用。上架市场的额外好处是：别人能在市场里搜到、市场页能看到版本变化。
+
 ### 更新插件
 
 更新检测是 **AstrBot 内置**的（WebUI → 插件 → 更新），插件侧不自己轮询远端，
