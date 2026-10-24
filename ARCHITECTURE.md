@@ -198,6 +198,7 @@ banbu-asterboot/               ← 仓库根 == 插件包根（AstrBot 只认包
 │   ├── models.py              # Snapshot / DeviceEvent / Rule / Account / DeviceAction 数据类
 │   ├── store.py               # 原子写 JSON（tmp+replace）、轮转 jsonl、锁
 │   ├── logging_compat.py      # 日志门面：只用宿主插件 logger，绝不进 astrbot.* 命名空间
+│   ├── about.py               # 读自身 metadata.yaml（版本/仓库），供 /banbu version 自证
 │   ├── compat.py              # 协议档案：端点表 / 字段映射 / 状态映射 / 漂移统计
 │   ├── credentials.py         # AES-256-GCM + 机器绑定盐，密钥派生与掩码
 │   ├── auth.py                # 发码 / 登录 / 换 uid / 列举设备（端点全来自档案）
@@ -951,7 +952,7 @@ $env:BAMBU_NO_AUTOPUSH=1     # 单次提交跳过自动推送（例如临时 WIP
 
 ## 18. 实现状态
 
-### 18.1 已实现（本地 180 项测试全绿）
+### 18.1 已实现（本地 189 项测试全绿）
 
 | 里程碑 | 内容 | 验证方式 |
 |---|---|---|

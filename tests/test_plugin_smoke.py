@@ -129,7 +129,8 @@ class PluginSmokeTest(unittest.IsolatedAsyncioTestCase):
         expected = {
             "bind", "code", "sn", "devices", "unbind", "status", "monitor", "light",
             "resume", "pause", "stop", "remind", "quiet", "milestones", "subscribe",
-            "unsubscribe", "llm", "route", "digest", "protocol", "test-event", "device",
+            "unsubscribe", "llm", "route", "digest", "protocol", "version",
+            "test-event", "device",
         }
         self.assertTrue(expected.issubset(set(GROUPS["banbu"].commands)))
 
@@ -285,6 +286,13 @@ class PluginSmokeTest(unittest.IsolatedAsyncioTestCase):
     async def test_protocol_diagnostics(self):
         text = await self.run_cmd("protocol")
         self.assertIn("协议档案", text)
+
+    async def test_version_command_shows_version_and_repo(self):
+        text = await self.run_cmd("version")
+        self.assertIn("拓竹 A1 状态助手", text)
+        self.assertRegex(text, r"\d+\.\d+\.\d+", "应显示语义化版本号")
+        self.assertIn("github.com", text, "应显示仓库地址")
+        self.assertIn("更换安装源", text, "应提示没有安装源时如何绑定")
 
     # ── 事件 → 路由 → 合并 → 推送 ──────────────────────────
     async def _bind_for_push(self):

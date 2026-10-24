@@ -19,7 +19,7 @@ from typing import Any
 # ── 内部包导入：兼容"作为包成员加载"与"作为顶层模块加载"两种方式 ──
 _HERE = os.path.dirname(os.path.abspath(__file__))
 try:  # pragma: no cover - 取决于宿主加载方式
-    from .bambu_a1 import auth, prompts, render, router
+    from .bambu_a1 import about, auth, prompts, render, router
     from .bambu_a1.adapters import BambuA1Adapter, list_adapters
     from .bambu_a1.bridge import LlmBridge
     from .bambu_a1.coalescer import Coalescer
@@ -44,7 +44,7 @@ try:  # pragma: no cover - 取决于宿主加载方式
 except ImportError:  # 宿主把 main.py 当顶层模块加载时
     if _HERE not in sys.path:
         sys.path.insert(0, _HERE)
-    from bambu_a1 import auth, prompts, render, router
+    from bambu_a1 import about, auth, prompts, render, router
     from bambu_a1.adapters import BambuA1Adapter, list_adapters
     from bambu_a1.bridge import LlmBridge
     from bambu_a1.coalescer import Coalescer
@@ -74,7 +74,7 @@ PLUGIN_NAME = "astrbot_plugin_bambu_a1"
 DEVICE_NAME = "拓竹 A1"
 PENDING_BIND_TTL = 900  # 验证码会话 15 分钟
 
-HELP_TEXT = """🖨️ 拓竹 A1 状态助手
+HELP_TEXT = """拓竹 A1 状态助手
 
 绑定与设备
   /banbu bind <手机号>      发送短信验证码（中国区账号）
@@ -102,6 +102,7 @@ HELP_TEXT = """🖨️ 拓竹 A1 状态助手
   /banbu route [list|set <事件> <通道>]   分界线
   /banbu digest                          最近打印小结
   /banbu protocol                        协议档案与漂移诊断
+  /banbu version                         插件版本与更新方式
   /banbu test-event <类型>               造一条事件验证推送链路
 
 也可以直接用自然语言问我，例如"现在打得怎么样""打到一半提醒我"。"""
@@ -174,8 +175,19 @@ class BambuA1Plugin(Star):
 
         self._pending_bind: dict[str, Any] = {}
         self._confirms: dict[str, tuple[str, float]] = {}
+        self._metadata_cache: dict[str, Any] | None = None
 
     # ─────────────────────────── 基础设施 ───────────────────────────
+    def metadata(self) -> dict[str, Any]:
+        """插件自身元数据（name/version/repo/author），读一次缓存。
+
+        版本信息只用于展示与排查；**更新检测交给 AstrBot 内置的插件更新**，
+        插件侧不轮询远端，避免重复实现和额外的网络请求。
+        """
+        if self._metadata_cache is None:
+            self._metadata_cache = about.read_metadata(_HERE)
+        return self._metadata_cache
+
     def _resolve_data_dir(self) -> str:
         base = ""
         try:  # AstrBot >= 4.9.2
@@ -385,7 +397,7 @@ class BambuA1Plugin(Star):
         warning = str(result.get("warning") or "")
         status = int(result.get("status") or 0)
         if warning:
-            return f"⚠️ 验证码请求已发出（HTTP {status}）\n{warning}"
+            return f"注意：验证码请求已发出（HTTP {status}）\n{warning}"
         extra = "" if auth.has_curl_cffi() else "\n（提示：未安装 curl_cffi，若收不到码先 pip install curl_cffi）"
         return (
             f"验证码已发送到 {mask_phone(phone)}（15 分钟内有效）。\n"
@@ -439,11 +451,11 @@ class BambuA1Plugin(Star):
         if account.serial:
             await self.start_monitor()
             return (
-                f"✅ 绑定成功（{account.phone_masked}）\n"
+                f"绑定成功（{account.phone_masked}）\n"
                 f"设备：{mask_serial(account.serial)} · 监控已启动"
             )
         return (
-            f"✅ 账号已绑定（{account.phone_masked}）\n"
+            f"账号已绑定（{account.phone_masked}）\n"
             "还差打印机序列号：发送 /banbu sn <序列号>，或 /banbu devices 让我试试从云端列举。"
         )
 
@@ -463,7 +475,7 @@ class BambuA1Plugin(Star):
         self.event_state.reset()
         started = await self.start_monitor()
         refreshed = await self.monitor.refresh_now() if started else False
-        lines = [f"✅ 设备已绑定：{mask_serial(serial)}"]
+        lines = [f"设备已绑定：{mask_serial(serial)}"]
         if started:
             lines.append("监控已启动（" + str(self.config_get("monitor_mode", "auto")) + "）")
         if refreshed:
@@ -618,13 +630,13 @@ class BambuA1Plugin(Star):
             yield event.plain_result("用法：/banbu light on 或 /banbu light off")
             return
         result = await self.execute_action(DeviceAction(kind="light", params={"mode": mode}))
-        yield event.plain_result(("💡 灯光已切到 " + mode) if result.ok else f"失败：{result.message}")
+        yield event.plain_result(("灯光已切到 " + mode) if result.ok else f"失败：{result.message}")
 
     @banbu.command("resume")
     async def cmd_resume(self, event: AstrMessageEvent):
         """继续打印。"""
         result = await self.execute_action(DeviceAction(kind="resume"))
-        yield event.plain_result("▶️ 已发送继续指令" if result.ok else f"失败：{result.message}")
+        yield event.plain_result("已发送继续指令" if result.ok else f"失败：{result.message}")
 
     @banbu.command("pause")
     async def cmd_pause(self, event: AstrMessageEvent):
@@ -634,7 +646,7 @@ class BambuA1Plugin(Star):
             yield event.plain_result("暂停会打断当前打印，确认请发：/banbu pause confirm")
             return
         result = await self.execute_action(DeviceAction(kind="pause"))
-        yield event.plain_result("⏸️ 已发送暂停指令" if result.ok else f"失败：{result.message}")
+        yield event.plain_result("已发送暂停指令" if result.ok else f"失败：{result.message}")
 
     @banbu.command("stop")
     async def cmd_stop(self, event: AstrMessageEvent):
@@ -644,7 +656,7 @@ class BambuA1Plugin(Star):
             yield event.plain_result("停止会放弃当前任务，确认请发：/banbu stop confirm")
             return
         result = await self.execute_action(DeviceAction(kind="stop"))
-        yield event.plain_result("⏹️ 已发送停止指令" if result.ok else f"失败：{result.message}")
+        yield event.plain_result("已发送停止指令" if result.ok else f"失败：{result.message}")
 
     # ─────────────────────────── 命令：提醒 ───────────────────────────
     @banbu.command("remind")
@@ -694,7 +706,7 @@ class BambuA1Plugin(Star):
                 yield event.plain_result(f"没加上：{error}")
                 return
             yield event.plain_result(
-                f"✅ 已添加 [{rule.id}] {rule.label}"
+                f"已添加 [{rule.id}] {rule.label}"
                 + ("（命中时走 LLM 措辞）" if use_llm else "")
                 + "\n查看：/banbu remind list"
             )
@@ -782,7 +794,7 @@ class BambuA1Plugin(Star):
         """把当前会话加入推送目标。"""
         umo = event.unified_msg_origin
         added = self.subscribers.add(umo, label=event.get_sender_name() or umo)
-        yield event.plain_result("✅ 本会话已加入推送" if added else "本会话本来就在推送列表里")
+        yield event.plain_result("本会话已加入推送" if added else "本会话本来就在推送列表里")
 
     @banbu.command("unsubscribe")
     async def cmd_unsubscribe(self, event: AstrMessageEvent):
@@ -873,24 +885,46 @@ class BambuA1Plugin(Star):
     async def cmd_protocol(self, event: AstrMessageEvent):
         """协议档案与漂移诊断。"""
         drift = self.profile.drift_report()
+        meta = self.metadata()
         lines = [
+            f"版本：{meta.get('version', '未知')}（AstrBot {about.astrbot_version()}）",
             f"协议档案：{drift['profile']}",
             f"区域：{self.config_get('region', 'China')} · broker：{self.profile.mqtt_broker(self.config_get('region', 'China'))}",
             f"监控：{self.config_get('monitor_mode', 'auto')} · 轮询 {self.config_get('poll_interval', 30)}s",
         ]
         if drift["missing_fields"]:
-            lines.append("⚠️ 档案声明但没读到的字段：" + "、".join(
+            lines.append("注意 · 档案声明但没读到的字段：" + "、".join(
                 f"{k}×{v}" for k, v in list(drift["missing_fields"].items())[:8]
             ))
         if drift["unknown_states"]:
-            lines.append("⚠️ 未映射的状态值：" + "、".join(drift["unknown_states"].keys()))
+            lines.append("注意 · 未映射的状态值：" + "、".join(drift["unknown_states"].keys()))
         if drift["unknown_fields"]:
-            lines.append("ℹ️ 云端新增（档案未声明）字段：" + "、".join(
+            lines.append("提示 · 云端新增（档案未声明）字段：" + "、".join(
                 list(drift["unknown_fields"].keys())[:10]
             ))
         if not self.profile.has_drift():
-            lines.append("✅ 暂未发现协议漂移")
+            lines.append("暂未发现协议漂移")
         lines.append("改字段映射请编辑 protocol_profiles/a1_v1.json 或配置 protocol_overrides")
+        yield event.plain_result("\n".join(lines))
+
+    @banbu.command("version")
+    async def cmd_version(self, event: AstrMessageEvent):
+        """查看插件版本与更新方式。"""
+        meta = self.metadata()
+        version = meta.get("version", "未知")
+        repo = meta.get("repo", "") or "（metadata.yaml 未填写 repo）"
+        lines = [
+            f"拓竹 A1 状态助手 · {version}",
+            render.RULE,
+            f"插件　{meta.get('name', PLUGIN_NAME)}",
+            f"仓库　{repo}",
+            f"宿主　AstrBot {about.astrbot_version()}",
+            "",
+            "更新方式（AstrBot 内置，插件不自己轮询）：",
+            "1. WebUI → 插件 → 本插件 → 更新",
+            "2. 若提示“无法检测更新”，先点“更换安装源”选 Repository，填上面的仓库地址",
+            "3. 手动拷贝/克隆进 data/plugins 的安装没有安装源记录，必须走第 2 步",
+        ]
         yield event.plain_result("\n".join(lines))
 
     @banbu.command("test-event")
@@ -912,7 +946,7 @@ class BambuA1Plugin(Star):
         adapters = list_adapters()
         lines = ["已注册适配器："]
         for key, cls in adapters.items():
-            mark = "✅" if getattr(cls, "available", True) else "⏳（二期）"
+            mark = "可用" if getattr(cls, "available", True) else "二期"
             lines.append(f"· {key}（{cls.display_name}）{mark}")
         dryer = self.config_get("dryer", {}) or {}
         if not isinstance(dryer, dict) or not dryer.get("enabled"):

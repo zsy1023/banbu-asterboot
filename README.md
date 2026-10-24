@@ -13,7 +13,7 @@
     <img src="https://img.shields.io/badge/AstrBot-Plugin-blue?style=flat-square" alt="AstrBot">
   </a>
   <img src="https://img.shields.io/badge/AstrBot-%3E%3D4.9.2-lightgrey?style=flat-square" alt="AstrBot Version">
-  <img src="https://img.shields.io/badge/version-0.1.9-green?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.1.10-green?style=flat-square" alt="Version">
   <a href="./LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0-green?style=flat-square" alt="License">
   </a>
@@ -175,8 +175,41 @@ git clone https://github.com/zsy1023/banbu-asterboot.git astrbot_plugin_bambu_a1
 
 然后在 WebUI 里重载插件。
 
-> **依赖**：`paho-mqtt`、`requests`、`cryptography` 由插件管理器按 `requirements.txt` 自动安装。
-> 建议额外装 `curl_cffi`（`pip install curl_cffi`）：拓竹云端有 Cloudflare，不装也能用，但发码偶发被拦。
+> **依赖**：`paho-mqtt`、`requests`、`cryptography`、`curl_cffi` 由插件管理器按 `requirements.txt` 自动安装。
+> `curl_cffi` 不是可选项：拓竹云端有 Cloudflare，缺了它会 504 且短信不下发。
+
+**安装方式影响能不能「一键更新」**（见下面「更新插件」）：
+
+| 安装方式 | WebUI 里的更新按钮 |
+|---|---|
+| 插件市场安装 | 可用，市场有新版本时会提示 |
+| WebUI「从仓库安装」填上面的地址 | 可用，直接拉仓库最新代码 |
+| 手动 `git clone` / 拷目录进 `data/plugins/` | **不可用**（提示"无法检测更新"），需要先绑定安装源 |
+
+### 更新插件
+
+更新检测是 **AstrBot 内置**的（WebUI → 插件 → 更新），插件侧不自己轮询远端，
+避免重复造轮子。它依赖两件事：
+
+1. `metadata.yaml` 里的 `version`（语义化版本）和 `repo`（GitHub 仓库地址）—— 本仓库都填好了
+2. 一条"安装源记录"：市场安装或"从仓库安装"时会自动写入；**手动克隆/拷贝的没有**
+
+所以手动装的同学第一次更新要这样做：
+
+```
+WebUI → 插件 → 找到「拓竹 A1 状态助手」→ 更换安装源
+  → 选 Repository
+  → 填 https://github.com/zsy1023/banbu-asterboot
+确认后「更新」按钮即可用；之后每次发版点一下就好
+```
+
+不确定当前版本、或想确认更新入口是否就绪：
+
+```
+/banbu version
+```
+
+它会打印插件版本、仓库地址、宿主版本，以及当前这个安装有没有更新入口。
 
 </details>
 
@@ -225,8 +258,9 @@ git clone https://github.com/zsy1023/banbu-asterboot.git astrbot_plugin_bambu_a1
 | `/banbu route [list\|set <事件> <通道>]` | 查看/修改 LLM 分界线 |
 | `/banbu digest` | 最近打印小结（有模型时由模型组织措辞） |
 | `/banbu protocol` | 协议档案与漂移诊断 |
+| `/banbu version` | 插件版本、仓库地址、更新入口 |
 | `/banbu test-event <事件类型>` | 造一条事件验证推送链路 |
-| `/banbu device list` | 已注册适配器（烘干箱为二期，显示 ⏳） |
+| `/banbu device list` | 已注册适配器（烘干箱为二期，标记"二期"） |
 
 也可以完全用自然语言：问状态、设提醒、切档位、调分界线、开关灯。
 

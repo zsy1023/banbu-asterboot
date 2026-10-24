@@ -3,6 +3,35 @@
 本项目的版本号与 `metadata.yaml` 的 `version` 保持一致（语义化版本，不带 `v` 前缀）。
 每个版本对应的 git tag 为 `v<version>`。
 
+## 0.1.10
+
+**接入 AstrBot 内置的更新机制：加 `/banbu version`，讲清怎么一键更新**
+
+查了 AstrBot v4.29.1 的实现（`astrbot/core/star/updater.py`、`dashboard/services/plugin_service.py`），
+结论是**更新检测属于框架，插件侧不该自己轮询**：
+
+- 有安装源记录（`install_method` = `market` 或 `repository`）时，
+  WebUI 的更新按钮才会启用；`repository` 走"下载仓库 zip → 覆盖 → 重装依赖 → reload"
+- 手动拷贝 / `git clone` 进 `data/plugins/` 的安装**没有记录**（implicit），
+  会提示"请先选择插件安装源后再更新"
+- 版本来源是仓库默认分支根目录的 `metadata.yaml`（`inspect_repository` 读 raw）
+
+所以这版只做三件插件侧该做的事：
+
+- 新增 `bambu_a1/about.py`：用最小解析读自己的 `metadata.yaml`（不 import yaml，
+  避免多一个失败点），拿到 version / repo / author
+- 新增 `/banbu version`：打印插件版本、仓库地址、宿主版本，并直接说明
+  "更新在 WebUI 点；若提示无法检测更新，先「更换安装源」选 Repository"；
+  `/banbu protocol` 首行也带上版本，排查时不用再去翻文件
+- README 新增「更新插件」章节 + 安装方式对更新能力的影响表
+
+顺带清理：`main.py` 里命令回执的 emoji（`✅`/`⚠️`/`▶️`/`⏸️`/`⏹️`/`💡`/`🖨️`/`⏳`/`ℹ️`）
+全部换成纯文字，和 0.1.6 起的渲染风格统一。
+
+- 新增 8 项测试：`metadata.yaml` 解析（多行块与列表不能误读、引号去壳、缺文件返回空）、
+  真实 metadata 的版本格式与 CHANGELOG 对齐、`/banbu version` 输出含版本/仓库/绑定提示、
+  `main.py` 零 emoji
+
 ## 0.1.9
 
 **像素图改成"只画热床 + 上面的件"，层数跟进度走**
