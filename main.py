@@ -10,6 +10,7 @@ import asyncio
 import contextlib
 import json
 import os
+import re
 import secrets
 import sys
 import time
@@ -93,6 +94,7 @@ HELP_TEXT = """🖨️ 拓竹 A1 状态助手
   /banbu remind add <类型> <值> [--llm]  添加提醒
   /banbu remind list|del <id>|clear      查看/删除/清空
   /banbu quiet <23:00-07:30|off>         安静时段
+  /banbu milestones <25,50,75|off>       进度里程碑（默认关闭）
   /banbu subscribe|unsubscribe           本会话加入/退出推送
 
 智能与诊断
@@ -732,6 +734,48 @@ class BambuA1Plugin(Star):
         self.set_config("quiet_hours", spec)
         self.set_config("quiet_hours_enabled", True)
         yield event.plain_result(f"安静时段已设为 {spec}（期间只推 critical 事件）")
+
+    @banbu.command("milestones")
+    async def cmd_milestones(self, event: AstrMessageEvent, spec: str = ""):
+        """进度里程碑。用法：/banbu milestones 25,50,75,90 或 /banbu milestones off"""
+        spec = (spec or "").strip()
+        current = list(self.config_get("progress_milestones", []) or [])
+
+        if not spec or spec.lower() in ("list", "status"):
+            summary = "、".join(f"{m}%" for m in current) if current else "未启用（默认不推进度）"
+            yield event.plain_result(
+                f"进度里程碑：{summary}\n"
+                "设置：/banbu milestones 25,50,75,90 / 关闭：/banbu milestones off\n"
+                "（里程碑只在你主动开启后才推；你自己用 /banbu remind 设的规则不受影响）"
+            )
+            return
+
+        if spec.lower() in ("off", "none", "0", "关", "关闭"):
+            self.set_config("progress_milestones", [])
+            yield event.plain_result("进度里程碑已关闭，只保留你自己设的提醒规则")
+            return
+
+        marks: list[int] = []
+        for token in re.split(r"[,，、\s]+", spec):
+            token = token.strip().rstrip("%")
+            if not token:
+                continue
+            try:
+                value = int(float(token))
+            except ValueError:
+                yield event.plain_result(f"「{token}」不是数字。示例：/banbu milestones 25,50,75,90")
+                return
+            if not 1 <= value <= 100:
+                yield event.plain_result("里程碑要落在 1–100 之间")
+                return
+            marks.append(value)
+        if not marks:
+            yield event.plain_result("没解析出数字。示例：/banbu milestones 25,50,75,90")
+            return
+
+        marks = sorted(set(marks))
+        self.set_config("progress_milestones", marks)
+        yield event.plain_result("进度里程碑已设为 " + "、".join(f"{m}%" for m in marks))
 
     @banbu.command("subscribe")
     async def cmd_subscribe(self, event: AstrMessageEvent):

@@ -769,7 +769,7 @@ class DryerEsp32Adapter(DeviceAdapter):
 | 推送 | `push_targets` | list | `[]` | 额外 umo；默认推送目标就是**绑定会话**，此项一般不用手填 |
 | 推送 | `quiet_hours_enabled` | bool | false | 安静时段**总开关**，关掉则完全不生效 |
 | 推送 | `quiet_hours` | string | `23:00-07:30` | 安静时段区间（仅在上项为 true 时生效）；期间只放 `critical` |
-| 推送 | `progress_milestones` | list | `[25,50,75,90]` | 进度里程碑 |
+| 推送 | `progress_milestones` | list | `[]` | 进度里程碑；**默认空 = 不主动推**，`/banbu milestones` 可改 |
 | 推送 | `merge_window_s` | int | 3 | 合并窗口（0 = 关闭合并，逐条即时发） |
 | 推送 | `merge_critical_window_s` | int | 0.8 | `critical` 事件专用窗口（更短） |
 | LLM | `llm_mode` | string | `summary_only` | `off`/`summary_only`/`full`，总闸 |
@@ -951,7 +951,7 @@ $env:BAMBU_NO_AUTOPUSH=1     # 单次提交跳过自动推送（例如临时 WIP
 
 ## 18. 实现状态
 
-### 18.1 已实现（本地 148 项测试全绿）
+### 18.1 已实现（本地 157 项测试全绿）
 
 | 里程碑 | 内容 | 验证方式 |
 |---|---|---|

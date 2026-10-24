@@ -128,8 +128,8 @@ class PluginSmokeTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("banbu", GROUPS)
         expected = {
             "bind", "code", "sn", "devices", "unbind", "status", "monitor", "light",
-            "resume", "pause", "stop", "remind", "quiet", "subscribe", "unsubscribe",
-            "llm", "route", "digest", "protocol", "test-event", "device",
+            "resume", "pause", "stop", "remind", "quiet", "milestones", "subscribe",
+            "unsubscribe", "llm", "route", "digest", "protocol", "test-event", "device",
         }
         self.assertTrue(expected.issubset(set(GROUPS["banbu"].commands)))
 
@@ -255,6 +255,32 @@ class PluginSmokeTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.config["quiet_hours_enabled"])
         text = await self.run_cmd("quiet", "/banbu quiet off")
         self.assertFalse(self.config["quiet_hours_enabled"])
+
+    async def test_milestones_default_off(self):
+        """默认不主动推进度（用户没要求就别推）。"""
+        self.assertEqual(self.config["progress_milestones"], [])
+        text = await self.run_cmd("milestones")
+        self.assertIn("未启用", text)
+
+    async def test_milestones_set_and_off(self):
+        text = await self.run_cmd("milestones", "/banbu milestones 25,50,75")
+        self.assertIn("25%", text)
+        self.assertEqual(self.config["progress_milestones"], [25, 50, 75])
+
+        text = await self.run_cmd("milestones", "/banbu milestones off")
+        self.assertIn("已关闭", text)
+        self.assertEqual(self.config["progress_milestones"], [])
+
+    async def test_milestones_rejects_bad_input(self):
+        text = await self.run_cmd("milestones", "/banbu milestones abc")
+        self.assertIn("不是数字", text)
+        text = await self.run_cmd("milestones", "/banbu milestones 120")
+        self.assertIn("1", text)
+        self.assertEqual(self.config["progress_milestones"], [])
+
+    async def test_milestones_accepts_chinese_separators(self):
+        await self.run_cmd("milestones", "/banbu milestones 10、20、30")
+        self.assertEqual(self.config["progress_milestones"], [10, 20, 30])
 
     async def test_protocol_diagnostics(self):
         text = await self.run_cmd("protocol")

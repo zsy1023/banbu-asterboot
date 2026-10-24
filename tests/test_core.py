@@ -35,9 +35,15 @@ from bambu_a1.models import (  # noqa: E402
     CH_LLM,
     EV_HMS_ERROR,
     EV_MILESTONE,
+    EV_OFFLINE,
+    EV_ONLINE,
+    EV_PRINT_FAILED,
     EV_PRINT_FINISHED,
     EV_PRINT_PAUSED,
+    EV_PRINT_RESUMED,
     EV_PRINT_STARTED,
+    EV_RULE_HIT,
+    EV_TEMP_ALARM,
     DeviceEvent,
     Snapshot,
     deep_merge,
@@ -532,12 +538,80 @@ class TestRender(unittest.TestCase):
         text = render.render_batch(events)
         self.assertIn("打印完成", text)
         self.assertIn("这次层纹比上次好。", text)
-        self.assertIn("———", text)
+        self.assertIn("──────────", text, "事实与模型补写之间应有一条分隔线")
 
     def test_fmt_minutes(self):
-        self.assertEqual(render.fmt_minutes(102), "1h 42m")
+        self.assertEqual(render.fmt_minutes(102), "1 小时 42 分")
         self.assertEqual(render.fmt_minutes(45), "45 分钟")
         self.assertEqual(render.fmt_minutes(None), "未知")
+        self.assertEqual(render.fmt_minutes(120), "2 小时")
+
+    def test_no_emoji_in_any_rendered_output(self):
+        """0.1.5 起所有模板都不再带 emoji（用户明确不喜欢自带 emoji）。"""
+        emoji_ranges = [
+            (0x1F300, 0x1FAFF),
+            (0x2600, 0x27BF),
+            (0x2B00, 0x2BFF),
+            (0xFE0F, 0xFE0F),
+            (0x23E9, 0x23FA),
+        ]
+
+        def has_emoji(text: str) -> list[str]:
+            return [
+                ch for ch in text
+                if any(low <= ord(ch) <= high for low, high in emoji_ranges)
+            ]
+
+        samples = [
+            render.render_status(snap_from(self.profile), state_age_s=12),
+            render.render_status(self.profile.to_snapshot({"print": {"gcode_state": "IDLE"}})),
+        ]
+        for event_type in (
+            EV_PRINT_STARTED, EV_PRINT_PAUSED, EV_PRINT_RESUMED, EV_PRINT_FINISHED,
+            EV_PRINT_FAILED, EV_HMS_ERROR, EV_MILESTONE, EV_RULE_HIT, EV_TEMP_ALARM,
+            EV_OFFLINE, EV_ONLINE,
+        ):
+            samples.append(render.render_event(DeviceEvent(type=event_type, data={
+                "task_name": "多功能PCB测试工作台_万向蛇管机械臂",
+                "percent": 47, "layer": 112, "total_layers": 240, "remaining_min": 63,
+                "elapsed_min": 100, "reason": "耗材用尽（断料）", "print_error": 16386,
+                "hms_codes": ["03004002"], "codes": ["03004002"], "component": "喷头",
+                "temp": 268, "threshold": 260, "idle_s": 300, "state": "printing",
+                "label": "打印进度到 1% 时提醒", "total_min": 262,
+            })))
+
+        for text in samples:
+            offenders = has_emoji(text)
+            self.assertFalse(offenders, f"渲染结果里还有 emoji：{offenders} → {text!r}")
+
+    def test_long_task_name_is_truncated(self):
+        long_name = "多功能PCB测试工作台_万向蛇管机械臂_多探针夹具_焊接辅助支架"
+        text = render.render_event(
+            DeviceEvent(type=EV_MILESTONE, data={"percent": 25, "task_name": long_name})
+        )
+        self.assertIn("…", text)
+        self.assertNotIn(long_name, text, "超长任务名应截断，否则一条消息全是文件名")
+
+    def test_zero_remaining_is_hidden(self):
+        text = render.render_event(
+            DeviceEvent(type=EV_MILESTONE, data={"percent": 25, "remaining_min": 0})
+        )
+        self.assertNotIn("剩 0", text)
+
+    def test_event_has_title_line_with_device(self):
+        text = render.render_event(
+            DeviceEvent(type=EV_PRINT_FINISHED, data={"task_name": "benchy", "elapsed_min": 42})
+        )
+        first_line = text.splitlines()[0]
+        self.assertEqual(first_line, "拓竹 A1 · 打印完成")
+        self.assertIn("耗时 42 分钟", text)
+
+    def test_rule_hit_uses_label_as_headline(self):
+        text = render.render_event(
+            DeviceEvent(type=EV_RULE_HIT, data={"label": "打印进度到 1% 时提醒", "percent": 1})
+        )
+        self.assertEqual(text.splitlines()[0], "拓竹 A1 · 打印进度到 1% 时提醒")
+        self.assertIn("1%", text)
 
 
 # ─────────────────────────── 监控引擎集成 ───────────────────────────

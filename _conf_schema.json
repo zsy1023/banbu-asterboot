@@ -81,8 +81,9 @@
   },
   "progress_milestones": {
     "description": "进度里程碑（%）",
+    "hint": "留空（默认）表示不主动推进度；想收就在聊天里发 /banbu milestones 25,50,75,90。",
     "type": "list",
-    "default": [25, 50, 75, 90]
+    "default": []
   },
   "merge_window_s": {
     "description": "合并窗口（秒）",

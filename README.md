@@ -13,7 +13,7 @@
     <img src="https://img.shields.io/badge/AstrBot-Plugin-blue?style=flat-square" alt="AstrBot">
   </a>
   <img src="https://img.shields.io/badge/AstrBot-%3E%3D4.9.2-lightgrey?style=flat-square" alt="AstrBot Version">
-  <img src="https://img.shields.io/badge/version-0.1.4-green?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.1.5-green?style=flat-square" alt="Version">
   <a href="./LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0-green?style=flat-square" alt="License">
   </a>
@@ -50,9 +50,17 @@ MQTT 长连接优先（秒级），连接不稳时自动降级为轮询（默认
 > 例：`monitor_mode = auto` 时网络抖动会自动换成轮询，恢复后再切回长连接。
 
 ### 3. 关键事件主动推送
-打印开始、暂停、恢复、完成、失败、HMS 故障码、耗材用尽（断料）、离线与恢复、进度里程碑。
+打印开始、暂停、恢复、完成、失败、HMS 故障码、耗材用尽（断料）、离线与恢复。
 
-> 例：半夜断料会立刻收到「🧵 耗材用尽（断料）· 进度 47% · 换好料后回复 /banbu resume 继续」。
+消息是**纯文字排版**，没有 emoji —— 标题行 `拓竹 A1 · 打印暂停`，下面是 `标签 值` 细节行，
+长任务名自动截断，多条事实用 ` · ` 分隔。
+
+> 例：半夜断料会收到
+> ```
+> 拓竹 A1 · 耗材用尽（断料）
+> 多功能PCB测试工作台 47%
+> 换好料后发送 /banbu resume 继续
+> ```
 
 ### 4. 13 种提醒规则
 层数到达、进度百分比、剩余时间、已打印时长、喷头/热床/腔温上下限、温度区间、
@@ -71,7 +79,16 @@ HMS 故障码、AMS 余料、离线分钟数。命令或自然语言都能加。
 模型补写的内容和结构化事实在合并窗口内合成**一条**消息（分隔线区分）；
 模型超窗、超预算或供应商挂了，就只发事实块。
 
-> 例：打印完成时收到一条「✅ 打印完成 / 耗时 1h42m」，同一条下面接模型的两句复盘。
+> 例：打印完成时收到
+> ```
+> 拓竹 A1 · 打印完成
+> 多功能PCB测试工作台
+> 耗时 1 小时 42 分
+>
+> ──────────
+>
+> 这次层纹比上次好，收尾建议顺手清一下喷嘴。
+> ```
 
 ### 7. 自然语言交互
 9 个 LLM 工具：查状态、查历史、列/加/删规则、切 LLM 档位、改分界线、控制打印机、绑定引导。
@@ -163,6 +180,7 @@ git clone https://github.com/zsy1023/banbu-asterboot.git astrbot_plugin_bambu_a1
 | `/banbu remind add <类型> <值> [--llm]` | 添加提醒规则 |
 | `/banbu remind list` / `del <id>` / `clear` | 规则管理 |
 | `/banbu quiet <23:00-07:30\|off>` | 安静时段 |
+| `/banbu milestones <25,50,75\|off>` | 进度里程碑（**默认关闭**，你不要求就不推） |
 | `/banbu subscribe` / `unsubscribe` | 本会话加入/退出推送 |
 | `/banbu light [on\|off]` | 机箱灯 |
 | `/banbu resume` | 继续打印 |
@@ -200,7 +218,7 @@ git clone https://github.com/zsy1023/banbu-asterboot.git astrbot_plugin_bambu_a1
 | **额外推送目标** | 列表 | 空 | 一般不用填，默认推给绑定会话 |
 | **启用安静时段** | 布尔 | 关 | 关掉则安静时段完全不生效 |
 | **安静时段区间** | 字符串 | `23:00-07:30` | 期间只推 critical |
-| **进度里程碑** | 列表 | `[25,50,75,90]` | 跨过这些百分比时提醒 |
+| **进度里程碑** | 列表 | `[]`（不推） | 留空即不主动推进度；要收就 `/banbu milestones 25,50,75,90` |
 | **合并窗口** | 整数 | 3 | 秒；0 表示逐条即时发 |
 | **critical 合并窗口** | 浮点 | 0.8 | 秒；告警用更短的窗口 |
 | **LLM 总闸** | 下拉 | 仅复盘与问答 | `off` / `summary_only` / `full` |
@@ -219,10 +237,11 @@ git clone https://github.com/zsy1023/banbu-asterboot.git astrbot_plugin_bambu_a1
 
 ```text
 LLM 总闸：关闭（全部模板直推）
-进度里程碑：[50]
+进度里程碑：留空（默认）
 安静时段：开启 23:00-07:30
 ```
-> 平时只在过半和出问题时收到一条准确的消息，半夜只推失败和断料。
+> 只在开始/暂停/完成/失败这类节点收到消息，半夜只推失败和断料。
+> 想额外要半程提醒就单独加一条规则：`/banbu remind add percent_reached 50`
 
 **场景二：想要"复盘感"**
 
