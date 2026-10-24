@@ -29,17 +29,36 @@ def display_width(text: str) -> int:
 
 
 class TestPrinterArt(unittest.TestCase):
-    def test_art_is_four_lines_and_rectangular(self):
-        art = render.PRINTER_ART
-        self.assertGreaterEqual(len(art), 3, "小打印机至少 3 行")
-        self.assertLessEqual(len(art), 4, "小打印机最多 4 行")
-        widths = {display_width(line) for line in art}
-        self.assertEqual(len(widths), 1, f"各行宽度不一致：{widths} → {art}")
+    def test_art_grows_with_progress(self):
+        """热床 + 成型中的件：层数随进度增长，空层不画。"""
+        self.assertEqual(render.art_layer_count(None), 0)
+        self.assertEqual(render.art_layer_count(0), 0)
+        self.assertEqual(render.art_layer_count(1), 1)
+        self.assertEqual(render.art_layer_count(33), 1)
+        self.assertEqual(render.art_layer_count(34), 2)
+        self.assertEqual(render.art_layer_count(67), 2)
+        self.assertEqual(render.art_layer_count(68), 3)
+        self.assertEqual(render.art_layer_count(100), 3)
+
+        self.assertEqual(render.printer_art(0), (render._ART_BED,))
+        self.assertEqual(len(render.printer_art(20)), 2)
+        self.assertEqual(len(render.printer_art(50)), 3)
+        self.assertEqual(len(render.printer_art(100)), 4)
+
+    def test_layers_widen_downwards(self):
+        art = render.printer_art(100)
+        widths = [len(line) for line in art[:-1]]
+        self.assertEqual(widths, sorted(widths), "越往下越宽")
+        self.assertGreater(len(art[-1]), widths[-1], "热床应比最底层更宽")
 
     def test_art_uses_only_block_characters(self):
-        for line in render.PRINTER_ART:
-            leftover = set(line) - BLOCKS
-            self.assertFalse(leftover, f"像素图里出现了非方块字符：{leftover}")
+        """不含空格：方块在中文客户端常按全角渲染，空格补宽会把图弄歪。"""
+        allowed = set("█▄")
+        for percent in (None, 0, 20, 50, 100):
+            for line in render.printer_art(percent):
+                leftover = set(line) - allowed
+                self.assertFalse(leftover, f"像素图里出现了非方块字符：{leftover}")
+                self.assertNotIn(" ", line)
 
     def test_status_card_contains_art_after_header(self):
         profile = load_profile("a1_v1")
@@ -47,11 +66,12 @@ class TestPrinterArt(unittest.TestCase):
             "gcode_state": "RUNNING", "mc_percent": 25,
             "nozzle_temper": 215, "nozzle_target_temper": 215,
         }})
+        art = render.printer_art(25)
         lines = render.render_status(snap).splitlines()
         self.assertEqual(lines[0], "拓竹 A1 · 打印中")
         self.assertEqual(lines[1], render.RULE)
-        self.assertEqual(tuple(lines[2 : 2 + len(render.PRINTER_ART)]), render.PRINTER_ART)
-        after_art = 2 + len(render.PRINTER_ART)
+        self.assertEqual(tuple(lines[2 : 2 + len(art)]), art)
+        after_art = 2 + len(art)
         self.assertEqual(lines[after_art], "", "像素图后应空一行再放细节")
         self.assertIn("进度", lines[after_art + 1])
 
@@ -59,19 +79,13 @@ class TestPrinterArt(unittest.TestCase):
         profile = load_profile("a1_v1")
         text = render.render_status(profile.to_snapshot({}))
         self.assertIn("暂无数据", text)
-        self.assertNotIn(render.PRINTER_ART[1], text)
+        self.assertNotIn(render._ART_BED, text)
 
-    def test_art_changes_with_state(self):
-        """打印时台上有件，空闲/完成/失败时台面是空的。"""
-        self.assertEqual(render.printer_art("printing"), render.PRINTER_ART)
-        self.assertEqual(render.printer_art("paused"), render.PRINTER_ART)
-        idle_art = render.printer_art("idle")
-        self.assertNotEqual(idle_art, render.PRINTER_ART)
-        self.assertEqual(len(idle_art), 4)
-        for state in ("finished", "failed", "unknown"):
-            self.assertEqual(render.printer_art(state), idle_art)
-        widths = {display_width(line) for line in idle_art}
-        self.assertEqual(len(widths), 1, f"空闲态像素图各行不等宽：{widths}")
+    def test_idle_card_shows_bare_bed(self):
+        profile = load_profile("a1_v1")
+        text = render.render_status(profile.to_snapshot({"print": {"gcode_state": "IDLE", "mc_percent": 0}}))
+        self.assertIn(render._ART_BED, text, "空闲时只画热床")
+        self.assertNotIn("████", text, "没有件就不该出现层")
 
     def test_idle_card_hides_zero_progress(self):
         profile = load_profile("a1_v1")
@@ -83,6 +97,7 @@ class TestPrinterArt(unittest.TestCase):
         profile = load_profile("a1_v1")
         text = render.render_status(profile.to_snapshot({"print": {"gcode_state": "FINISH", "mc_percent": 100}}))
         self.assertIn("100%", text)
+        self.assertEqual(len(render.printer_art(100)), 4, "完成时应是满层")
 
 
 class TestStatusHints(unittest.TestCase):

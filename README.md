@@ -13,7 +13,7 @@
     <img src="https://img.shields.io/badge/AstrBot-Plugin-blue?style=flat-square" alt="AstrBot">
   </a>
   <img src="https://img.shields.io/badge/AstrBot-%3E%3D4.9.2-lightgrey?style=flat-square" alt="AstrBot Version">
-  <img src="https://img.shields.io/badge/version-0.1.8-green?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.1.9-green?style=flat-square" alt="Version">
   <a href="./LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0-green?style=flat-square" alt="License">
   </a>
@@ -70,15 +70,14 @@ MQTT 长连接优先（秒级），连接不稳时自动降级为轮询（默认
 ```
 拓竹 A1 · 打印中
 ━━━━━━━━━━━━━━━━━━━━
-▄▄▄▄▄▄▄▄▄▄▄▄▄▄
-█  ▄▄▄▄▄▄▄▄  █
-█  ████████  █
-█▄▄▄▄▄▄▄▄▄▄▄▄█
+██████
+████████
+▄▄▄▄▄▄▄▄▄▄
 
 任务　多功能PCB测试工作台_万向蛇管机械臂_多探针…
-进度　▏███░░░░░░░░░▕ 25%
-层次　20/91
-时间　已 1 小时 2 分 · 剩 3 小时 54 分
+进度　▏█████░░░░░░░▕ 40%
+层次　36/91
+时间　已 1 小时 30 分 · 剩 2 小时 40 分
 喷头　▰▰▰▰▰▰▰▰ 215/215°C
 热床　▰▰▰▰▱▱▱▱ 30/60°C
 腔体　32°C
@@ -86,9 +85,11 @@ MQTT 长连接优先（秒级），连接不稳时自动降级为轮询（默认
 设备　灯 开 · 信号 -52dBm · 12 秒前更新
 ```
 
-细节都是按状态自适应的：
+细节都是自适应的：
 
-- **像素图**：打印/暂停时台面上有件（`████████`），空闲/完成/失败时台面留白
+- **像素图只画热床和上面的件**，层数跟着进度增长（0% 只有热床，1–33% 一层，
+  34–67% 两层，68% 以上三层）。不画机身，所以跟 bedslinger / CoreXY 都无关；
+  也不用空格补白，避免方块字符在中文客户端被当全角渲染把图弄歪
 - **进度条**带端点 `▏…▕`，像仪表刻度
 - **温度条**按 `当前/目标` 填充：升温半格、到温满格、超温按满格（clamp）；
   腔体没有目标温度就只给数值，不画空条

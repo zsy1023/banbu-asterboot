@@ -48,25 +48,45 @@ TASK_NAME_MAX = 16
 LABEL_PAD = "　"  # 全角空格：让 2 字标签与 3 字标签视觉对齐
 TEMP_BAR_WIDTH = 8
 
-# 状态卡顶部的小打印机（4 行像素图）。只用方块字符与半角空格，
-# 不含 CJK，所以在等宽与非等宽字体下都能对齐。
-#   行0 顶梁 / 行1 打印头 / 行2 正在成型的物件 / 行3 热床
-_ART_TOP = ("▄" * 14, "█  ▄▄▄▄▄▄▄▄  █")
-_ART_OBJECT = "█  ████████  █"
-_ART_EMPTY = "█            █"
-_ART_BED = "█▄▄▄▄▄▄▄▄▄▄▄▄█"
+# 状态卡顶部的像素图：**只画热床和上面正在成型的件**。
+# 不画机身，就不必纠结 bedslinger / CoreXY —— 机型结构跟这条消息无关。
+#
+# 只用方块字符、**不用空格**：U+2588/U+2584 这类方块在中文客户端里常被按全角渲染，
+# 一旦用半角空格补齐宽度，整张图就会歪。全方块 + 靠行宽差表达层次，
+# 在"全角方块"和"半角方块"两种渲染下都保持相对形状。
+#   最窄的一行是顶层，最宽的一行是底层，最后一行是热床
+_ART_BED = "▄" * 10
+_ART_LAYERS = (
+    "████",        # 第 3 层（最窄）
+    "██████",      # 第 2 层
+    "████████",    # 第 1 层（贴着热床）
+)  # 由窄到宽，像逐层堆起来
 
-#: 兼容旧引用（等价于"正在打印"的样子）
-PRINTER_ART = (_ART_TOP[0], _ART_TOP[1], _ART_OBJECT, _ART_BED)
-
-#: 这些状态下打印台上没有东西，"物件"那一行留白
-_IDLE_STATES = {"idle", "finished", "failed", "unknown"}
+#: 兼容旧引用：满进度（100%）时的样子
+PRINTER_ART = (_ART_LAYERS[0], _ART_LAYERS[1], _ART_LAYERS[2], _ART_BED)
 
 
-def printer_art(state: str = "printing") -> tuple[str, str, str, str]:
-    """按状态给像素图：打印中台上有件，空闲/完成/失败时台面是空的。"""
-    body = _ART_EMPTY if state in _IDLE_STATES else _ART_OBJECT
-    return (_ART_TOP[0], _ART_TOP[1], body, _ART_BED)
+def art_layer_count(percent: float | None) -> int:
+    """把进度映射成"已经堆了几层"（0–3）。0 或未知 → 只有热床。"""
+    if percent is None:
+        return 0
+    try:
+        value = float(percent)
+    except (TypeError, ValueError):
+        return 0
+    if value <= 0:
+        return 0
+    if value >= 100:
+        return 3
+    return max(1, min(3, 1 + int(value // 34)))  # 1–33% → 1 层，34–67% → 2 层，68%+ → 3 层
+
+
+def printer_art(percent: float | None = None) -> tuple[str, ...]:
+    """热床 + 成型中的件：层数随进度增长，空层直接不画（不留空行）。"""
+    filled = art_layer_count(percent)
+    rows = [_ART_LAYERS[index] for index in range(3 - filled, 3)]
+    rows.append(_ART_BED)
+    return tuple(rows)
 
 
 #: 状态卡底部的"下一步"提示（能做什么，比单纯报状态有用）
@@ -369,7 +389,7 @@ def render_status(
 
     lines = card_head(device_name, STATE_LABEL.get(snap.state, snap.state))
     # 小打印机放在卡片头下面，作为视觉标识（纯方块字符，不含 CJK）
-    lines.extend(printer_art(snap.state))
+    lines.extend(printer_art(snap.percent))
     lines.append("")
 
     def add(label: str, value: Any) -> None:
