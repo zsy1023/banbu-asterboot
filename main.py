@@ -35,7 +35,7 @@ try:  # pragma: no cover - 取决于宿主加载方式
     )
     from .bambu_a1.events import EventState
     from .bambu_a1.hooks import HookBus
-    from .bambu_a1.models import Account, DeviceAction, DeviceEvent, Snapshot
+    from .bambu_a1.models import ALL_EVENT_TYPES, Account, DeviceAction, DeviceEvent, Snapshot
     from .bambu_a1.monitor import MonitorEngine
     from .bambu_a1.push import Pusher, Subscribers, parse_quiet_range
     from .bambu_a1.rules import RULE_TYPES, RuleEngine, parse_temp_range
@@ -60,7 +60,7 @@ except ImportError:  # 宿主把 main.py 当顶层模块加载时
     )
     from bambu_a1.events import EventState
     from bambu_a1.hooks import HookBus
-    from bambu_a1.models import Account, DeviceAction, DeviceEvent, Snapshot
+    from bambu_a1.models import ALL_EVENT_TYPES, Account, DeviceAction, DeviceEvent, Snapshot
     from bambu_a1.monitor import MonitorEngine
     from bambu_a1.push import Pusher, Subscribers, parse_quiet_range
     from bambu_a1.rules import RULE_TYPES, RuleEngine, parse_temp_range
@@ -95,6 +95,7 @@ HELP_TEXT = """拓竹 A1 状态助手
   /banbu remind list|del <id>|clear      查看/删除/清空
   /banbu quiet <23:00-07:30|off>         安静时段
   /banbu milestones <25,50,75|off>       进度里程碑（默认关闭）
+  /banbu events [list|off <类型>|on <类型>|all]  推送事件白名单（默认全推）
   /banbu subscribe|unsubscribe           本会话加入/退出推送
 
 智能与诊断
@@ -319,6 +320,12 @@ class BambuA1Plugin(Star):
         await self.hooks.emit("on_snapshot", snap)
 
     async def _on_events(self, events: list[DeviceEvent], snap: Snapshot | None) -> None:
+        # 0) 事件白名单：events_enabled 为空表示全推；填了只推其中的类型
+        allowed = {str(x) for x in (self.config_get("events_enabled", []) or [])}
+        if allowed:
+            events = [e for e in events if e.type in allowed]
+            if not events:
+                return
         # 1) 分界线：rule > llm_route > 默认，并受 llm_mode 总闸约束
         router.apply(
             events,
@@ -788,6 +795,59 @@ class BambuA1Plugin(Star):
         marks = sorted(set(marks))
         self.set_config("progress_milestones", marks)
         yield event.plain_result("进度里程碑已设为 " + "、".join(f"{m}%" for m in marks))
+
+    @banbu.command("events")
+    async def cmd_events(self, event: AstrMessageEvent, action: str = "", name: str = ""):
+        """推送事件白名单。用法：/banbu events [list|on <类型>|off <类型>|all]"""
+        action = (action or "").strip().lower()
+        name = (name or "").strip()
+        allowed = [str(x) for x in (self.config_get("events_enabled", []) or [])]
+
+        if not action or action in ("list", "ls"):
+            lines = ["推送事件（空 = 全推）："]
+            for event_type in ALL_EVENT_TYPES:
+                if not allowed:
+                    mark = "on"
+                else:
+                    mark = "on" if event_type in allowed else "off"
+                lines.append(f"  [{mark}] {event_type}")
+            lines.append("")
+            lines.append("改白名单：/banbu events on print_started / off milestone / all")
+            lines.append("（进度里程碑另有关闭开关：/banbu milestones off）")
+            yield event.plain_result("\n".join(lines))
+            return
+
+        if action in ("all", "reset", "全开"):
+            self.set_config("events_enabled", [])
+            yield event.plain_result("已恢复为推送全部事件")
+            return
+
+        if action not in ("on", "off", "enable", "disable", "开", "关"):
+            yield event.plain_result("用法：/banbu events [list|on <类型>|off <类型>|all]")
+            return
+        if name not in ALL_EVENT_TYPES:
+            yield event.plain_result(
+                f"未知事件类型 {name}。可用：{'、'.join(ALL_EVENT_TYPES)}"
+            )
+            return
+
+        enable = action in ("on", "enable", "开")
+        if enable:
+            # 白名单为空代表全开，此时无需再改
+            if not allowed:
+                yield event.plain_result(f"当前已是全推状态，{name} 本来就在推")
+                return
+            if name not in allowed:
+                allowed.append(name)
+        else:
+            if not allowed:
+                allowed = [t for t in ALL_EVENT_TYPES if t != name]
+            elif name in allowed:
+                allowed.remove(name)
+        self.set_config("events_enabled", allowed)
+        state = "开启" if enable else "关闭"
+        suffix = f"（白名单：{'、'.join(allowed)}）" if allowed else "（回到全推）"
+        yield event.plain_result(f"已{state} {name} 的推送{suffix}")
 
     @banbu.command("subscribe")
     async def cmd_subscribe(self, event: AstrMessageEvent):

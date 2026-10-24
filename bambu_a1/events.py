@@ -30,7 +30,8 @@ from .models import (
 )
 from .store import read_json, write_json
 
-PRINTING_STATES_BEFORE_START = {"idle", "prepare", "finished", "failed", "unknown", ""}
+#: 这些状态视为"一件还没开始"；`paused` 刻意**不在**其中 —— 暂停→继续是同一件
+PRINTING_STATES_BEFORE_START = {"idle", "prepare", "slicing", "finished", "failed", "unknown", ""}
 
 
 def _hms_codes(snap: Snapshot) -> set[str]:
@@ -49,17 +50,57 @@ def _dedup(*parts: Any) -> str:
     return ":".join(str(p) for p in parts if p not in (None, ""))
 
 
+#: 打印中进度回退超过这么多百分点，判定为"换件了"（漏掉中间状态时靠它兜底）
+PROGRESS_REVERSAL = 10
+
+
+def is_new_job(prev: Snapshot | None, cur: Snapshot) -> bool:
+    """判断是不是"开始了新的一件"。
+
+    三种情况都算，缺一不可地覆盖真实场景：
+      1. 上一件已经结束/还没开始 → 现在打印（正常开始）
+      2. `task_id` 变了（云端给了新任务号）
+      3. 打印中进度明显回退（比如 40% 直接跳回 3%）—— 30 秒轮询很容易
+         错过 `FINISH`/`IDLE` 这两个中间状态，只能靠这条兜底
+
+    注意 `paused → printing` **不算**新的一件（那是继续），否则恢复打印会被
+    误判成"开始打印"，`print_resumed` 永远发不出来。
+
+    首轮（prev 为 None）不算新任务：那只是建立基线。
+    """
+    if prev is None or cur is None:
+        return False
+    if cur.state != "printing":
+        return False
+    if prev.state != "printing":
+        return prev.state in PRINTING_STATES_BEFORE_START
+    if cur.task_id and prev.task_id and cur.task_id != prev.task_id:
+        return True
+    if (
+        prev.percent is not None
+        and cur.percent is not None
+        and cur.percent + PROGRESS_REVERSAL < prev.percent
+    ):
+        return True
+    return False
+
+
 def detect(
     prev: Snapshot | None,
     cur: Snapshot,
     profile: Profile,
     milestones: list[int] | None = None,
     first_poll: bool = False,
+    job_seq: int = 0,
 ) -> list[DeviceEvent]:
     """对比新旧快照产出事件列表。
 
     first_poll=True 时只建立基线：不把"启动时已经处于 FINISH/FAILED/PAUSE"
     当成刚发生的事件（否则每次重启都会误报一次完成）。
+
+    job_seq 是"当前这一件的序号"（由 EventState 维护），所有一次性事件的去重键
+    都带上它 —— 否则同一文件重打、且云端没给 task_id 时，
+    第二件的"开始打印/打印完成"会被上一件的去重键吃掉。
     """
     events: list[DeviceEvent] = []
     if not cur or not cur.connected:
@@ -67,28 +108,49 @@ def detect(
 
     prev_state = prev.state if prev else ""
     cur_state = cur.state
-    task = cur.task_id or cur.task_name
+    next_job = is_new_job(prev, cur)
+    pct_reversed = (
+        prev is not None
+        and prev.percent is not None
+        and cur.percent is not None
+        and cur.percent + PROGRESS_REVERSAL < prev.percent
+    )
 
     def push(evt: DeviceEvent) -> None:
         events.append(evt)
 
     # ── 状态跃迁 ────────────────────────────────────────────
+    # 上一件我们没看到 FINISH 就换了新件（轮询错过中间状态）：
+    # 补一条"结束"，但明确标注是推断的，不编造耗时。
+    if next_job and pct_reversed and prev is not None:
+        push(DeviceEvent(
+            type=EV_PRINT_FINISHED,
+            severity=SEV_INFO,
+            device=cur.device,
+            data={
+                "task_name": prev.task_name,
+                "percent": prev.percent,
+                "inferred": True,
+            },
+            dedup_key=_dedup(EV_PRINT_FINISHED, job_seq - 1, "inferred"),
+        ))
+
     if cur_state == "printing":
-        if prev is not None and prev_state == "paused":
+        if prev is not None and prev_state == "paused" and not next_job:
             push(DeviceEvent(
                 type=EV_PRINT_RESUMED,
                 severity=SEV_INFO,
                 device=cur.device,
                 data={"task_name": cur.task_name, "percent": cur.percent},
-                dedup_key=_dedup(EV_PRINT_RESUMED, task, int(cur.ts)),
+                dedup_key=_dedup(EV_PRINT_RESUMED, job_seq, cur.layer),
             ))
-        elif not first_poll and (prev is None or prev_state in PRINTING_STATES_BEFORE_START):
+        elif not first_poll and (prev is None or prev_state != "printing" or next_job):
             push(DeviceEvent(
                 type=EV_PRINT_STARTED,
                 severity=SEV_INFO,
                 device=cur.device,
                 data={"task_name": cur.task_name, "total_min": cur.total_min},
-                dedup_key=_dedup(EV_PRINT_STARTED, task),
+                dedup_key=_dedup(EV_PRINT_STARTED, job_seq),
             ))
 
     if cur_state == "paused" and prev is not None and prev_state == "printing":
@@ -105,7 +167,7 @@ def detect(
                 "layer": cur.layer,
                 **{k: v for k, v in detail.items() if k not in ("stage",)},
             },
-            dedup_key=_dedup(EV_PRINT_PAUSED, task, cur.layer, cur.percent),
+            dedup_key=_dedup(EV_PRINT_PAUSED, job_seq, cur.layer, cur.percent),
         ))
         if reason_key == "filament_runout":
             push(DeviceEvent(
@@ -113,7 +175,7 @@ def detect(
                 severity=SEV_CRITICAL,
                 device=cur.device,
                 data={"task_name": cur.task_name, "percent": cur.percent},
-                dedup_key=_dedup(EV_FILAMENT_RUNOUT, task, cur.layer),
+                dedup_key=_dedup(EV_FILAMENT_RUNOUT, job_seq, cur.layer),
             ))
 
     if cur_state == "finished" and prev_state != "finished" and not first_poll:
@@ -127,7 +189,7 @@ def detect(
                 "elapsed_min": worked,
                 "total_layers": cur.total_layers,
             },
-            dedup_key=_dedup(EV_PRINT_FINISHED, task),
+            dedup_key=_dedup(EV_PRINT_FINISHED, job_seq),
         ))
 
     if cur_state == "failed" and prev_state != "failed" and not first_poll:
@@ -141,7 +203,7 @@ def detect(
                 "print_error": cur.print_error,
                 "hms_codes": sorted(_hms_codes(cur)),
             },
-            dedup_key=_dedup(EV_PRINT_FAILED, task, cur.percent),
+            dedup_key=_dedup(EV_PRINT_FAILED, job_seq, cur.percent),
         ))
 
     # ── 故障码新增 ──────────────────────────────────────────
@@ -186,7 +248,7 @@ def detect(
                         "remaining_min": cur.remaining_min,
                         "task_name": cur.task_name,
                     },
-                    dedup_key=_dedup(EV_MILESTONE, task, mark),
+                    dedup_key=_dedup(EV_MILESTONE, job_seq, mark),
                 ))
 
     return events
@@ -232,15 +294,31 @@ class EventState:
             Snapshot.from_dict(data["last_snapshot"]) if data.get("last_snapshot") else None
         )
         self.task_id: str = data.get("task_id", "")
+        self.job_seq: int = int(data.get("job_seq") or 0)
         self.seen: list[str] = list(data.get("seen") or [])
         self.offline: bool = bool(data.get("offline"))
         self._seen_set = set(self.seen)
 
     # ── 任务基线 ────────────────────────────────────────────
+    def begin_if_new_job(self, prev: Snapshot | None, cur: Snapshot) -> bool:
+        """判定新的一件开始 → 序号 +1 并清空去重记录。
+
+        去重键都带 job_seq，序号一变，"开始打印/打印完成/里程碑"就能再报一次 ——
+        这是"同一文件重打、云端没给 task_id"时唯一可靠的做法。
+        """
+        if not is_new_job(prev, cur):
+            return False
+        self.job_seq += 1
+        self.task_id = cur.task_id or cur.task_name or self.task_id
+        self.seen = []
+        self._seen_set = set()
+        return True
+
     def sync_task(self, snap: Snapshot) -> bool:
-        """任务变化时清空去重记录，返回是否换了任务。"""
+        """兼容旧调用：任务标识变化时视为新的一件。"""
         task = snap.task_id or snap.task_name or ""
         if task and task != self.task_id:
+            self.job_seq += 1
             self.task_id = task
             self.seen = []
             self._seen_set = set()
@@ -271,6 +349,7 @@ class EventState:
         payload = {
             "last_snapshot": self.last_snapshot.to_dict() if self.last_snapshot else None,
             "task_id": self.task_id,
+            "job_seq": self.job_seq,
             "seen": self.seen[-self.MAX_KEYS:],
             "offline": self.offline,
             "saved_at": now(),
@@ -283,6 +362,7 @@ class EventState:
     def reset(self) -> None:
         self.last_snapshot = None
         self.task_id = ""
+        self.job_seq = 0
         self.seen = []
         self._seen_set = set()
         self.offline = False

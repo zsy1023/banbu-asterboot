@@ -13,7 +13,7 @@
     <img src="https://img.shields.io/badge/AstrBot-Plugin-blue?style=flat-square" alt="AstrBot">
   </a>
   <img src="https://img.shields.io/badge/AstrBot-%3E%3D4.9.2-lightgrey?style=flat-square" alt="AstrBot Version">
-  <img src="https://img.shields.io/badge/version-0.1.10-green?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.1.11-green?style=flat-square" alt="Version">
   <a href="./LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0-green?style=flat-square" alt="License">
   </a>
@@ -103,6 +103,17 @@ HMS 故障码、AMS 余料、离线分钟数。命令或自然语言都能加。
 
 > 例：`/banbu remind add layer_reached 50` —— 打到第 50 层提醒你；
 > `/banbu remind add temp_in_range 30-40 --llm` —— 温度进 30~40°C 时让模型润色一句。
+
+**哪些能改、哪些写死**：
+
+| 项 | 在哪改 |
+|---|---|
+| 推不推某类事件 | `events_enabled` 白名单（空 = 全推）或 `/banbu events off <类型>` |
+| 推哪些进度百分比 | `progress_milestones`（默认空 = 不推）或 `/banbu milestones ...` |
+| 某类事件是否过模型 | `llm_route` 或 `/banbu route set ...` |
+| 什么时段不吵你 | `quiet_hours_enabled` + `quiet_hours` 或 `/banbu quiet ...` |
+| 什么条件提醒你 | `/banbu remind add ...` |
+| **怎么算"开始/结束/暂停"** | **写死在 `bambu_a1/events.py`**（事实层面的判定，不建议交给配置，免得漏报） |
 
 ### 5. LLM 分界线自己定
 每个事件类型都能单独设成 `direct`（不经过模型）/ `llm`（模型补写）/ `both`，
@@ -254,6 +265,7 @@ WebUI → 插件 → 找到「拓竹 A1 状态助手」→ 更换安装源
 | `/banbu remind list` / `del <id>` / `clear` | 规则管理 |
 | `/banbu quiet <23:00-07:30\|off>` | 安静时段 |
 | `/banbu milestones <25,50,75\|off>` | 进度里程碑（**默认关闭**，你不要求就不推） |
+| `/banbu events [list\|off <类型>\|on <类型>\|all]` | 推送事件白名单（默认全推） |
 | `/banbu subscribe` / `unsubscribe` | 本会话加入/退出推送 |
 | `/banbu light [on\|off]` | 机箱灯 |
 | `/banbu resume` | 继续打印 |
@@ -293,6 +305,7 @@ WebUI → 插件 → 找到「拓竹 A1 状态助手」→ 更换安装源
 | **启用安静时段** | 布尔 | 关 | 关掉则安静时段完全不生效 |
 | **安静时段区间** | 字符串 | `23:00-07:30` | 期间只推 critical |
 | **进度里程碑** | 列表 | `[]`（不推） | 留空即不主动推进度；要收就 `/banbu milestones 25,50,75,90` |
+| **推送事件白名单** | 列表 | `[]`（全推） | 留空 = 全部推送；填了只推其中的类型，例如 `[print_started, print_finished, print_paused, print_failed]` |
 | **合并窗口** | 整数 | 3 | 秒；0 表示逐条即时发 |
 | **critical 合并窗口** | 浮点 | 0.8 | 秒；告警用更短的窗口 |
 | **LLM 总闸** | 下拉 | 仅复盘与问答 | `off` / `summary_only` / `full` |

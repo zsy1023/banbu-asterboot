@@ -252,6 +252,14 @@ def _event_lines(event: DeviceEvent, device_name: str) -> list[str]:
         ])
 
     if event.type == EV_PRINT_FINISHED:
+        if data.get("inferred"):
+            # 我们没观察到 FINISH（轮询错过了），按"进度归零 + 换了任务"推断出来的：
+            # 结论是这一件结束了，但耗时不可信，所以不编造。
+            return card_head(device_name, "打印结束", event.type) + _rows([
+                ("任务", truncate(data.get("task_name"))),
+                ("进度", f"{data['percent']}%" if data.get("percent") is not None else None),
+                ("说明", "没抓到完成状态，按进度归零推断"),
+            ])
         return card_head(device_name, "打印完成", event.type) + _rows([
             ("任务", truncate(data.get("task_name"))),
             ("耗时", fmt_minutes(data["elapsed_min"]) if data.get("elapsed_min") else None),

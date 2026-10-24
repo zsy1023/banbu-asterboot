@@ -235,10 +235,18 @@ class MonitorEngine:
         first_poll = prev is None
         milestones = self._config("progress_milestones", []) or []
 
-        if snap.task_id or snap.task_name:
-            self.state.sync_task(snap)
+        # 先判定"是不是换了新的一件"：序号 +1 后，一次性事件（开始/完成/里程碑）
+        # 的去重键才会跟着变，否则同一文件重打时第二件会被上一件的指纹吃掉。
+        self.state.begin_if_new_job(prev, snap)
 
-        events = detect(prev, snap, self.profile, milestones=milestones, first_poll=first_poll)
+        events = detect(
+            prev,
+            snap,
+            self.profile,
+            milestones=milestones,
+            first_poll=first_poll,
+            job_seq=self.state.job_seq,
+        )
         events.extend(self.rules.evaluate(prev, snap))
         events = self.state.filter_new(events)
 

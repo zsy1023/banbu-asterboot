@@ -216,6 +216,51 @@ class TestEventDetect(unittest.TestCase):
         # 没传 first_poll 但也没有 prev 时同样不报
         self.assertEqual([e for e in self._detect(None, cur) if e.type == EV_HMS_ERROR], [])
 
+    # ── 线上反馈：开始/结束没提醒（0.1.11 修复）──────────────
+    def test_new_job_detected_when_progress_resets(self):
+        """错过 FINISH/IDLE（30s 轮询常见）：上一件按"进度归零"补结束，同时报新件开始。"""
+        prev = snap_from(self.profile, mc_percent=40, task_id="j1")
+        cur = snap_from(self.profile, mc_percent=3, task_id="j2")
+        events = self._detect(prev, cur, milestones=[25, 50])
+        types = [e.type for e in events]
+        self.assertIn(EV_PRINT_FINISHED, types, "上一件结束必须补上")
+        self.assertIn(EV_PRINT_STARTED, types, "新一件开始必须报")
+        finished = next(e for e in events if e.type == EV_PRINT_FINISHED)
+        self.assertTrue(finished.data.get("inferred"), "推断出来的结束要打标记")
+        self.assertEqual(finished.data.get("percent"), 40)
+        self.assertEqual(finished.data.get("task_name"), prev.task_name)
+
+    def test_new_job_detected_when_task_id_changes(self):
+        prev = snap_from(self.profile, mc_percent=80, task_id="j1")
+        cur = snap_from(self.profile, mc_percent=82, task_id="j2")
+        types = [e.type for e in self._detect(prev, cur)]
+        self.assertIn(EV_PRINT_STARTED, types)
+
+    def test_pause_resume_is_not_a_new_job(self):
+        """暂停后继续是同一件：必须发 print_resumed，而不是 print_started。"""
+        prev = snap_from(self.profile, gcode_state="PAUSE", mc_percent=52, task_id="j1")
+        cur = snap_from(self.profile, gcode_state="RUNNING", mc_percent=52, task_id="j1")
+        types = [e.type for e in self._detect(prev, cur)]
+        self.assertIn("print_resumed", types)
+        self.assertNotIn(EV_PRINT_STARTED, types)
+
+    def test_small_progress_dip_is_not_a_new_job(self):
+        """打印中进度小幅抖动（重新切片/回报延迟）不能误判成换件。"""
+        prev = snap_from(self.profile, mc_percent=44, task_id="j1")
+        cur = snap_from(self.profile, mc_percent=40, task_id="j1")
+        types = [e.type for e in self._detect(prev, cur)]
+        self.assertNotIn(EV_PRINT_STARTED, types)
+        self.assertNotIn(EV_PRINT_FINISHED, types)
+
+    def test_inferred_finish_renders_honest_note(self):
+        text = render.render_event(DeviceEvent(
+            type=EV_PRINT_FINISHED,
+            data={"task_name": "benchy", "percent": 40, "inferred": True},
+        ))
+        self.assertIn("打印结束", text)
+        self.assertIn("推断", text)
+        self.assertNotIn("耗时", text, "没抓到完成状态就不该编造耗时")
+
     def test_milestone_crossing(self):
         prev = snap_from(self.profile, mc_percent=40)
         cur = snap_from(self.profile, mc_percent=52)
@@ -285,6 +330,33 @@ class TestEventStateDedup(unittest.TestCase):
             reloaded = EventState(path)
             self.assertIsNotNone(reloaded.last_snapshot)
             self.assertEqual(reloaded.last_snapshot.percent, 42)
+
+    def test_same_file_reprint_notifies_again(self):
+        """同一文件重打、云端没给 task_id：第二件也必须报开始/完成（0.1.11 修复）。"""
+        profile = load_profile("a1_v1")
+        with tempfile.TemporaryDirectory() as tmp:
+            state = EventState(os.path.join(tmp, "state.json"))
+            prev = None
+            reported: list[str] = []
+            for kwargs in (
+                {"gcode_state": "IDLE", "mc_percent": 0, "task_id": ""},
+                {"gcode_state": "RUNNING", "mc_percent": 5, "task_id": ""},
+                {"gcode_state": "FINISH", "mc_percent": 100, "task_id": ""},
+                {"gcode_state": "IDLE", "mc_percent": 0, "task_id": ""},
+                {"gcode_state": "RUNNING", "mc_percent": 5, "task_id": ""},
+                {"gcode_state": "FINISH", "mc_percent": 100, "task_id": ""},
+            ):
+                cur = profile.to_snapshot(raw_print(**kwargs))
+                state.begin_if_new_job(prev, cur)
+                events = detect(
+                    prev, cur, profile, milestones=[], first_poll=prev is None,
+                    job_seq=state.job_seq,
+                )
+                reported.extend(e.type for e in state.filter_new(events))
+                state.save(cur)
+                prev = cur
+            self.assertEqual(reported.count(EV_PRINT_STARTED), 2, reported)
+            self.assertEqual(reported.count(EV_PRINT_FINISHED), 2, reported)
 
 
 # ─────────────────────────── 规则引擎 ───────────────────────────

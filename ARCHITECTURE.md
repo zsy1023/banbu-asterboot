@@ -369,6 +369,19 @@ class DeviceEvent:
 > 一次性推送了 25%/50%/75%/90% 四条"进度"，每条还带"剩余 0 分钟"。
 > 现在 milestone 要求"正在打印 + 增量"，渲染层也不再显示 0 分钟的剩余时间。
 
+**"新的一件"怎么判定（0.1.11 事故后加固）**：`is_new_job()` 满足任一即算新件 ——
+① 上一件没在打印（`paused` 除外，那是继续）；② `task_id` 变了；
+③ 打印中进度**回退超过 10 个百分点**。
+
+配套两条机制：
+
+- **任务序号 `job_seq`**：每次判定新件就 +1 并持久化，所有一次性事件的去重键都带上它。
+  否则"同一文件重打 + 云端没给 `task_id`"时，第二件的开始/完成会被上一件的指纹吃掉
+  —— 这正是线上"开始和结束都没提醒"的原因之一。
+- **推断结束**：错过 `FINISH`/`IDLE`（30 秒轮询很常见）时，按"进度归零 + 换件"补一条
+  `print_finished`，`data.inferred = true`；渲染成"打印结束 · 没抓到完成状态，按进度归零推断"，
+  **不编造耗时**。—— 这是线上"结束没提醒"的另一个原因。
+
 ### 5.5 推送链路（`ui/push.py`）
 
 ```
@@ -771,6 +784,7 @@ class DryerEsp32Adapter(DeviceAdapter):
 | 推送 | `quiet_hours_enabled` | bool | false | 安静时段**总开关**，关掉则完全不生效 |
 | 推送 | `quiet_hours` | string | `23:00-07:30` | 安静时段区间（仅在上项为 true 时生效）；期间只放 `critical` |
 | 推送 | `progress_milestones` | list | `[]` | 进度里程碑；**默认空 = 不主动推**，`/banbu milestones` 可改 |
+| 推送 | `events_enabled` | list | `[]` | 事件白名单；**空 = 全推**，`/banbu events` 可改 |
 | 推送 | `merge_window_s` | int | 3 | 合并窗口（0 = 关闭合并，逐条即时发） |
 | 推送 | `merge_critical_window_s` | int | 0.8 | `critical` 事件专用窗口（更短） |
 | LLM | `llm_mode` | string | `summary_only` | `off`/`summary_only`/`full`，总闸 |
@@ -952,7 +966,7 @@ $env:BAMBU_NO_AUTOPUSH=1     # 单次提交跳过自动推送（例如临时 WIP
 
 ## 18. 实现状态
 
-### 18.1 已实现（本地 189 项测试全绿）
+### 18.1 已实现（本地 199 项测试全绿）
 
 | 里程碑 | 内容 | 验证方式 |
 |---|---|---|

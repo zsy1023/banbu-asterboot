@@ -85,6 +85,12 @@
     "type": "list",
     "default": []
   },
+  "events_enabled": {
+    "description": "要推送的事件类型",
+    "hint": "留空（默认）= 全部推送。填了就是白名单，例如 [print_started, print_finished, print_paused, print_failed]。可用类型见 /banbu events。",
+    "type": "list",
+    "default": []
+  },
   "merge_window_s": {
     "description": "合并窗口（秒）",
     "hint": "窗口内的事件与模型解释会合成一条消息发出；设为 0 关闭合并、逐条即时发。",

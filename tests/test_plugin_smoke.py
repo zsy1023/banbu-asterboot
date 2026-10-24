@@ -130,7 +130,7 @@ class PluginSmokeTest(unittest.IsolatedAsyncioTestCase):
             "bind", "code", "sn", "devices", "unbind", "status", "monitor", "light",
             "resume", "pause", "stop", "remind", "quiet", "milestones", "subscribe",
             "unsubscribe", "llm", "route", "digest", "protocol", "version",
-            "test-event", "device",
+            "events", "test-event", "device",
         }
         self.assertTrue(expected.issubset(set(GROUPS["banbu"].commands)))
 
@@ -293,6 +293,32 @@ class PluginSmokeTest(unittest.IsolatedAsyncioTestCase):
         self.assertRegex(text, r"\d+\.\d+\.\d+", "应显示语义化版本号")
         self.assertIn("github.com", text, "应显示仓库地址")
         self.assertIn("更换安装源", text, "应提示没有安装源时如何绑定")
+
+    async def test_events_default_pushes_everything(self):
+        self.assertEqual(self.config["events_enabled"], [])
+        text = await self.run_cmd("events")
+        self.assertIn("print_started", text)
+        self.assertIn("print_finished", text)
+
+    async def test_events_off_then_on(self):
+        text = await self.run_cmd("events", "/banbu events off print_started")
+        self.assertIn("关闭", text)
+        self.assertNotIn("print_started", self.config["events_enabled"], "关掉后不该在白名单里")
+        self.assertIn("print_finished", self.config["events_enabled"], "其余类型应保持推送")
+
+        await self.run_cmd("events", "/banbu events on print_started")
+        self.assertIn("print_started", self.config["events_enabled"])
+
+    async def test_events_all_resets_whitelist(self):
+        await self.run_cmd("events", "/banbu events off milestone")
+        self.assertTrue(self.config["events_enabled"])
+        text = await self.run_cmd("events", "/banbu events all")
+        self.assertIn("全部", text)
+        self.assertEqual(self.config["events_enabled"], [])
+
+    async def test_events_rejects_unknown_type(self):
+        text = await self.run_cmd("events", "/banbu events off not_a_type")
+        self.assertIn("未知事件类型", text)
 
     # ── 事件 → 路由 → 合并 → 推送 ──────────────────────────
     async def _bind_for_push(self):
