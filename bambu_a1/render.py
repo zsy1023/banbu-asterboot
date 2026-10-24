@@ -1,10 +1,20 @@
 """确定性文本渲染：纯模板，零 LLM、零网络。
 
-样式约定（0.1.5 起）：
-  - **不使用 emoji/彩色图标**，全部用排版表达层次：标题行 `设备 · 事件`，
-    细节行 `标签 值`，多条信息用 ` · ` 分隔，长任务名截断到 16 个字符 + …
-  - 进度条用 `█`/`░`，分隔线用 `─`；这些是几何字符，不是 emoji，各家客户端都能正常显示
-  - 所有数值都来自结构化事实；缺失就省略整行，绝不显示 0 假装正常
+样式（0.1.6 起，卡片式排版，**不使用 emoji**）：
+
+    ▸ 拓竹 A1 · 开始打印
+    ━━━━━━━━━━━━━━━━━━━━
+    任务　多功能PCB测试工作台_万向蛇…
+    预计　4 小时 22 分
+
+  - 标题行：`几何字形 + 设备 · 事件`，字形全部取自几何/制表符区段（▸ ‖ ✓ ✕ ◆ ▲ ⊘ ◉ ▰），
+    不是 emoji，各客户端都按普通字符渲染
+  - 标题下一条 `━` 制表线，形成"卡片头部"
+  - 细节行：`标签 + 全角空格对齐 + 值`，2 字标签自动补全角空格，和 3 字标签对齐
+  - 页脚（操作提示）与正文之间空一行
+  - 事实与模型补写用 `━━━━` 分隔
+
+所有数值都来自结构化事实；缺失就省略整行，绝不显示 0 假装正常。
 """
 
 from __future__ import annotations
@@ -31,9 +41,30 @@ from .models import (
     Snapshot,
 )
 
-SEP = "\n\n──────────\n\n"
-DIVIDER = "──────────"
+RULE = "━" * 20
+SEP = f"\n\n{RULE}\n\n"
+DIVIDER = RULE
 TASK_NAME_MAX = 16
+LABEL_PAD = "　"  # 全角空格：让 2 字标签与 3 字标签视觉对齐
+
+# 事件标题前的几何字形。刻意避开 Unicode emoji 区段：
+#   ▸(25B8) ‖(2016) ✓(2713) ✕(2715) ◆(25C6) ▲(25B2) ⊘(2298) ◉(25C9) ▰(25B0)
+GLYPH = {
+    "print_started": "▸",
+    "print_resumed": "▸",
+    "print_paused": "‖",
+    "print_finished": "✓",
+    "print_failed": "✕",
+    "hms_error": "◆",
+    "filament_runout": "◆",
+    "temp_alarm": "▲",
+    "offline": "⊘",
+    "online": "◉",
+    "milestone": "▰",
+    "rule_hit": "◆",
+    "task_summary": "▪",
+    "periodic_digest": "▪",
+}
 
 STATE_LABEL = {
     "idle": "空闲",
@@ -91,130 +122,139 @@ def fmt_temp(pairs: list[tuple[str, float | None, float | None]]) -> str:
     return " · ".join(parts)
 
 
-def title(device_name: str, headline: str) -> str:
-    """统一标题行：`拓竹 A1 · 打印完成`。"""
-    return f"{device_name} · {headline}"
-
-
 def kv(label: str, value: Any) -> str | None:
-    """`标签 值`；值为空则整行省略。"""
+    """`标签 + 全角空格 + 值`；值为空则整行省略。
+
+    统一用全角空格分隔（不再按标签长度切换），避免 2 字/3 字标签混排时列不齐的观感。
+    """
     if value is None or value == "":
         return None
-    return f"{label} {value}"
+    return f"{label}{LABEL_PAD}{value}"
 
 
-def _lines(*candidates: str | None) -> list[str]:
-    return [line for line in candidates if line]
+def card_head(device_name: str, headline: str, event_type: str | None = None) -> list[str]:
+    """卡片头：`▸ 拓竹 A1 · 事件` + 制表线。"""
+    glyph = GLYPH.get(event_type or "")
+    head = f"{device_name} · {headline}"
+    return [f"{glyph} {head}" if glyph else head, RULE]
 
 
+def _rows(pairs: list[tuple[str, Any]], footer: str | None = None) -> list[str]:
+    lines: list[str] = []
+    for label, value in pairs:
+        line = kv(label, value)
+        if line:
+            lines.append(line)
+    if footer:
+        lines.append("")
+        lines.append(footer)
+    return lines
+
+
+# ── 各事件模板 ──────────────────────────────────────────
 def _event_lines(event: DeviceEvent, device_name: str) -> list[str]:
     data = event.data or {}
 
     if event.type == EV_PRINT_STARTED:
-        return _lines(
-            title(device_name, "开始打印"),
-            truncate(data.get("task_name")),
-            kv("预计", fmt_minutes(data["total_min"]) if data.get("total_min") else None),
-        )
+        return card_head(device_name, "开始打印", event.type) + _rows([
+            ("任务", truncate(data.get("task_name"))),
+            ("预计", fmt_minutes(data["total_min"]) if data.get("total_min") else None),
+        ])
 
     if event.type == EV_PRINT_PAUSED:
         percent = data.get("percent")
         where = None
         if percent is not None:
-            where = f"进度 {percent}%"
+            where = f"{percent}%"
             if data.get("layer"):
                 where += f" · 第 {data['layer']} 层"
-        return _lines(
-            title(device_name, "打印暂停"),
-            kv("原因", data.get("reason")),
-            where,
-            "换好料后发送 /banbu resume 继续",
+        return card_head(device_name, "打印暂停", event.type) + _rows(
+            [
+                ("原因", data.get("reason")),
+                ("进度", where),
+            ],
+            footer="换好料后发送 /banbu resume 继续",
         )
 
     if event.type == EV_PRINT_RESUMED:
-        return _lines(title(device_name, "继续打印"), truncate(data.get("task_name")))
+        return card_head(device_name, "继续打印", event.type) + _rows([
+            ("任务", truncate(data.get("task_name"))),
+        ])
 
     if event.type == EV_PRINT_FINISHED:
-        return _lines(
-            title(device_name, "打印完成"),
-            truncate(data.get("task_name")),
-            kv("耗时", fmt_minutes(data["elapsed_min"]) if data.get("elapsed_min") else None),
-        )
+        return card_head(device_name, "打印完成", event.type) + _rows([
+            ("任务", truncate(data.get("task_name"))),
+            ("耗时", fmt_minutes(data["elapsed_min"]) if data.get("elapsed_min") else None),
+        ])
 
     if event.type == EV_PRINT_FAILED:
         percent = data.get("percent")
-        return _lines(
-            title(device_name, "打印失败"),
-            truncate(data.get("task_name")),
-            percent if percent is None else f"进度 {percent}%",
-            kv("错误码", data.get("print_error")),
-            kv("故障码", " ".join(str(c) for c in data["hms_codes"]) if data.get("hms_codes") else None),
-        )
+        codes = data.get("hms_codes") or []
+        raw_error = data.get("print_error")
+        try:
+            error_text = f"0x{int(raw_error):04X}" if raw_error else None
+        except (TypeError, ValueError):
+            error_text = str(raw_error) if raw_error else None
+        return card_head(device_name, "打印失败", event.type) + _rows([
+            ("任务", truncate(data.get("task_name"))),
+            ("进度", f"{percent}%" if percent is not None else None),
+            ("错误码", error_text),
+            ("故障码", " ".join(str(c) for c in codes) if codes else None),
+        ])
 
     if event.type == EV_HMS_ERROR:
         codes = " ".join(str(c) for c in data.get("codes") or [])
         percent = data.get("percent")
-        return _lines(
-            title(device_name, "设备报故障"),
-            kv("故障码", codes or None),
-            percent if percent is None else f"进度 {percent}%",
-        )
+        return card_head(device_name, "设备报故障", event.type) + _rows([
+            ("故障码", codes or None),
+            ("进度", f"{percent}%" if percent is not None else None),
+        ])
 
     if event.type == EV_FILAMENT_RUNOUT:
         percent = data.get("percent")
-        detail = truncate(data.get("task_name")) if data.get("task_name") else ""
-        if percent is not None:
-            detail = f"{detail} {percent}%".strip()
-        return _lines(
-            title(device_name, "耗材用尽（断料）"),
-            detail or None,
-            "换好料后发送 /banbu resume 继续",
+        return card_head(device_name, "耗材用尽（断料）", event.type) + _rows(
+            [
+                ("任务", truncate(data.get("task_name"))),
+                ("进度", f"{percent}%" if percent is not None else None),
+            ],
+            footer="换好料后发送 /banbu resume 继续",
         )
 
     if event.type == EV_TEMP_ALARM:
         component = data.get("component") or "温度"
         if data.get("range"):
             low, high = data["range"]
-            line = f"{component} {data.get('temp')}°C（区间 {low}~{high}°C）"
+            value = f"{data.get('temp')}°C（区间 {low}~{high}°C）"
         else:
-            line = f"{component} {data.get('temp')}°C（阈值 {data.get('threshold')}°C）"
-        return _lines(title(device_name, "温度告警"), line)
+            value = f"{data.get('temp')}°C（阈值 {data.get('threshold')}°C）"
+        return card_head(device_name, "温度告警", event.type) + _rows([(component, value)])
 
     if event.type == EV_OFFLINE:
         idle = data.get("idle_s")
-        since = f"已 {fmt_minutes(idle / 60)} 没有数据" if idle else "长时间没有数据"
-        return _lines(
-            title(device_name, "离线"),
-            since,
-            "检查供电与网络，恢复后会自动通知",
+        return card_head(device_name, "离线", event.type) + _rows(
+            [("时长", f"已 {fmt_minutes(idle / 60)} 没有数据" if idle else "长时间没有数据")],
+            footer="检查供电与网络，恢复后会自动通知",
         )
 
     if event.type == EV_ONLINE:
         state = STATE_LABEL.get(data.get("state") or "", data.get("state") or "")
-        return _lines(title(device_name, "恢复在线"), kv("当前", state or None))
+        return card_head(device_name, "恢复在线", event.type) + _rows([("当前", state or None)])
 
     if event.type == EV_MILESTONE:
         percent = data.get("percent")
-        detail = None
         layer, total = data.get("layer"), data.get("total_layers")
-        if layer:
-            detail = f"{layer}/{total} 层" if total else f"第 {layer} 层"
         remaining = data.get("remaining_min")
-        if isinstance(remaining, (int, float)) and remaining > 0:
-            remain_text = f"剩 {fmt_minutes(remaining)}"
-            detail = f"{detail} · {remain_text}" if detail else remain_text
-        return _lines(
-            title(device_name, f"进度 {percent}%"),
-            detail,
-            truncate(data.get("task_name")),
-        )
+        return card_head(device_name, f"进度 {percent}%", event.type) + _rows([
+            ("层次", f"{layer}/{total} 层" if layer and total else (f"第 {layer} 层" if layer else None)),
+            ("剩余", fmt_minutes(remaining) if isinstance(remaining, (int, float)) and remaining > 0 else None),
+            ("任务", truncate(data.get("task_name"))),
+        ])
 
     if event.type == EV_RULE_HIT:
         label = data.get("label") or "提醒"
-        percent = data.get("percent")
         bits: list[str] = []
-        if percent is not None:
-            bits.append(f"进度 {percent}%")
+        if data.get("percent") is not None:
+            bits.append(f"进度 {data['percent']}%")
         if data.get("layer"):
             bits.append(f"第 {data['layer']} 层")
         if data.get("remaining_min") is not None:
@@ -229,7 +269,7 @@ def _event_lines(event: DeviceEvent, device_name: str) -> list[str]:
             bits.append("余料 " + " ".join(
                 f"{t.get('type')} {t.get('remain')}%" for t in data["trays"]
             ))
-        return _lines(title(device_name, label), " · ".join(bits) or None)
+        return card_head(device_name, label, event.type) + _rows([("当前", " · ".join(bits) or None)])
 
     if event.type in (EV_TASK_SUMMARY, EV_PERIODIC_DIGEST):
         text = data.get("text")
@@ -240,7 +280,7 @@ def _event_lines(event: DeviceEvent, device_name: str) -> list[str]:
         f"{key} {value}" for key, value in data.items()
         if not key.startswith("_") and key != "llm_text"
     )
-    return _lines(title(device_name, event.type), extra or None)
+    return card_head(device_name, event.type) + _rows([("详情", extra or None)])
 
 
 # ── 对外接口 ────────────────────────────────────────────
@@ -249,7 +289,7 @@ def render_event(event: DeviceEvent, *, device_name: str = "拓竹 A1") -> str:
 
 
 def render_batch(events: list[DeviceEvent], *, device_name: str = "拓竹 A1") -> str:
-    """把一批事件渲染成一条消息；模型补写接在事实之后，用一条分隔线隔开。"""
+    """把一批事件渲染成一条消息；模型补写接在事实之后，用一条制表线隔开。"""
     facts: list[str] = []
     drafts: list[str] = []
     for event in events:
@@ -273,20 +313,19 @@ def render_status(
     extra_lines: list[str] | None = None,
 ) -> str:
     if not snap.connected:
-        return (
-            f"{title(device_name, '暂无数据')}\n"
-            "还没拿到过状态，先确认绑定与监控是否正常。"
+        return "\n".join(
+            card_head(device_name, "暂无数据") + ["还没拿到过状态，先确认绑定与监控是否正常。"]
         )
 
-    lines = [title(device_name, STATE_LABEL.get(snap.state, snap.state))]
+    lines = card_head(device_name, STATE_LABEL.get(snap.state, snap.state))
     if snap.task_name:
-        lines.append(truncate(snap.task_name, 24))
+        lines.append(kv("任务", truncate(snap.task_name, 24)) or "")
 
     if snap.percent is not None:
-        lines.append(f"进度 {progress_bar(snap.percent)} {snap.percent}%")
+        lines.append(kv("进度", f"{progress_bar(snap.percent)} {snap.percent}%") or "")
     if snap.layer:
         total = f"/{snap.total_layers}" if snap.total_layers else ""
-        lines.append(f"层次 {snap.layer}{total}")
+        lines.append(kv("层次", f"{snap.layer}{total}") or "")
 
     time_bits = []
     # 0 / 负数没有信息量：FINISH 时 mc_remaining_time 就是 0，显示"剩 0 分钟"会误导
@@ -295,7 +334,7 @@ def render_status(
     if snap.remaining_min and snap.remaining_min > 0:
         time_bits.append(f"剩 {fmt_minutes(snap.remaining_min)}")
     if time_bits:
-        lines.append(" · ".join(time_bits))
+        lines.append(kv("时间", " · ".join(time_bits)) or "")
 
     temp_line = fmt_temp([
         ("喷头", snap.nozzle, snap.nozzle_target),
@@ -303,7 +342,7 @@ def render_status(
         ("腔体", snap.chamber, None),
     ])
     if temp_line:
-        lines.append(temp_line)
+        lines.append(kv("温度", temp_line) or "")
 
     trays = []
     for unit in snap.ams:
@@ -319,7 +358,7 @@ def render_status(
             bit += f" {snap.vtray['remain']}%"
         trays.append(bit)
     if trays:
-        lines.append("耗材 " + " · ".join(trays[:4]))
+        lines.append(kv("耗材", " · ".join(trays[:4])) or "")
 
     bits = []
     if snap.light:
@@ -331,11 +370,11 @@ def render_status(
     if state_age_s is not None:
         bits.append(f"{state_age_s} 秒前更新")
     if bits:
-        lines.append(" · ".join(bits))
+        lines.append(kv("设备", " · ".join(bits)) or "")
 
     for line in extra_lines or []:
         lines.append(line)
-    return "\n".join(lines)
+    return "\n".join(line for line in lines if line)
 
 
 def render_rule_list(rules: list[Any]) -> str:
@@ -355,7 +394,7 @@ def render_rule_list(rules: list[Any]) -> str:
 
 
 def severity_badge(event: DeviceEvent) -> str:
-    """不用 emoji 的严重度标记，保留给需要前缀的调用方。"""
+    """不用 emoji 的严重度标记（供需要前缀的调用方使用）。"""
     if event.severity == SEV_CRITICAL:
         return "[严重]"
     return "[提醒]" if event.severity == "warn" else "[信息]"

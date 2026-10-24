@@ -13,7 +13,7 @@
     <img src="https://img.shields.io/badge/AstrBot-Plugin-blue?style=flat-square" alt="AstrBot">
   </a>
   <img src="https://img.shields.io/badge/AstrBot-%3E%3D4.9.2-lightgrey?style=flat-square" alt="AstrBot Version">
-  <img src="https://img.shields.io/badge/version-0.1.5-green?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.1.6-green?style=flat-square" alt="Version">
   <a href="./LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0-green?style=flat-square" alt="License">
   </a>
@@ -52,13 +52,16 @@ MQTT 长连接优先（秒级），连接不稳时自动降级为轮询（默认
 ### 3. 关键事件主动推送
 打印开始、暂停、恢复、完成、失败、HMS 故障码、耗材用尽（断料）、离线与恢复。
 
-消息是**纯文字排版**，没有 emoji —— 标题行 `拓竹 A1 · 打印暂停`，下面是 `标签 值` 细节行，
-长任务名自动截断，多条事实用 ` · ` 分隔。
+消息是**卡片式纯文字排版**，没有 emoji：标题行 `几何字形 + 设备 · 事件`，下面一条 `━` 制表线，
+再往下是 `标签　值` 细节行和操作提示。
 
 > 例：半夜断料会收到
 > ```
-> 拓竹 A1 · 耗材用尽（断料）
-> 多功能PCB测试工作台 47%
+> ◆ 拓竹 A1 · 耗材用尽（断料）
+> ━━━━━━━━━━━━━━━━━━━━
+> 任务　多功能PCB测试工作台_万向蛇…
+> 进度　47%
+>
 > 换好料后发送 /banbu resume 继续
 > ```
 
@@ -81,11 +84,12 @@ HMS 故障码、AMS 余料、离线分钟数。命令或自然语言都能加。
 
 > 例：打印完成时收到
 > ```
-> 拓竹 A1 · 打印完成
-> 多功能PCB测试工作台
-> 耗时 1 小时 42 分
+> ✓ 拓竹 A1 · 打印完成
+> ━━━━━━━━━━━━━━━━━━━━
+> 任务　多功能PCB测试工作台
+> 耗时　1 小时 42 分
 >
-> ──────────
+> ━━━━━━━━━━━━━━━━━━━━
 >
 > 这次层纹比上次好，收尾建议顺手清一下喷嘴。
 > ```

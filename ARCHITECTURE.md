@@ -208,7 +208,7 @@ banbu-asterboot/               ← 仓库根 == 插件包根（AstrBot 只认包
 │   ├── hooks.py               # 8 个扩展点的钩子总线（异常隔离）
 │   ├── router.py              # 分界线：rule > llm_route > 默认，受 llm_mode 总闸约束
 │   ├── coalescer.py           # 合并窗口：事实 + 模型补写合成一条，超窗先发事实
-│   ├── render.py              # 确定性文本渲染（状态卡、各事件文案、规则列表）
+│   ├── render.py              # 卡片式文本渲染（设备·事件 + ━ 制表线 + 标签行），零 emoji
 │   ├── push.py                # 订阅者清单 + 安静时段 + context.send_message
 │   ├── prompts.py             # 系统提示词、防编造约束、事实注入模板
 │   ├── bridge.py              # llm_generate 封装：超时/预算/降级/供应商选择
@@ -951,7 +951,7 @@ $env:BAMBU_NO_AUTOPUSH=1     # 单次提交跳过自动推送（例如临时 WIP
 
 ## 18. 实现状态
 
-### 18.1 已实现（本地 157 项测试全绿）
+### 18.1 已实现（本地 160 项测试全绿）
 
 | 里程碑 | 内容 | 验证方式 |
 |---|---|---|

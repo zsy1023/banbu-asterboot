@@ -538,7 +538,7 @@ class TestRender(unittest.TestCase):
         text = render.render_batch(events)
         self.assertIn("打印完成", text)
         self.assertIn("这次层纹比上次好。", text)
-        self.assertIn("──────────", text, "事实与模型补写之间应有一条分隔线")
+        self.assertIn("━━━━━━━━━━━━━━━━━━━━", text, "事实与模型补写之间应有一条制表线")
 
     def test_fmt_minutes(self):
         self.assertEqual(render.fmt_minutes(102), "1 小时 42 分")
@@ -547,19 +547,26 @@ class TestRender(unittest.TestCase):
         self.assertEqual(render.fmt_minutes(120), "2 小时")
 
     def test_no_emoji_in_any_rendered_output(self):
-        """0.1.5 起所有模板都不再带 emoji（用户明确不喜欢自带 emoji）。"""
+        """模板里不允许出现 emoji。
+
+        允许的"装饰字符"是显式白名单里的排版符号（制表线、方块、几何字形），
+        它们不属于 emoji 区段；其余落在 emoji 区段的一律不允许。
+        """
+        allowed = set("━▸‖✓✕◆▲⊘◉▰▪█░·…")
         emoji_ranges = [
-            (0x1F300, 0x1FAFF),
-            (0x2600, 0x27BF),
-            (0x2B00, 0x2BFF),
-            (0xFE0F, 0xFE0F),
-            (0x23E9, 0x23FA),
+            (0x1F000, 0x1FAFF),   # 各类 pictograph / 表情 / 补充符号
+            (0x2600, 0x27BF),     # Misc Symbols + Dingbats（emoji 常用区）
+            (0x2B00, 0x2BFF),     # 箭头/星形等
+            (0xFE0F, 0xFE0F),     # variation selector（把字符变成 emoji 的开关）
+            (0x23E9, 0x23FA),     # 媒体控制类 emoji
+            (0x2190, 0x21FF),     # 箭头区（避免被渲染成彩色箭头）
         ]
 
-        def has_emoji(text: str) -> list[str]:
+        def offenders_of(text: str) -> list[str]:
             return [
                 ch for ch in text
-                if any(low <= ord(ch) <= high for low, high in emoji_ranges)
+                if ch not in allowed
+                and any(low <= ord(ch) <= high for low, high in emoji_ranges)
             ]
 
         samples = [
@@ -581,8 +588,35 @@ class TestRender(unittest.TestCase):
             })))
 
         for text in samples:
-            offenders = has_emoji(text)
+            offenders = offenders_of(text)
             self.assertFalse(offenders, f"渲染结果里还有 emoji：{offenders} → {text!r}")
+
+    def test_card_style_structure(self):
+        """卡片式排版：标题带几何字形 + 一条制表线 + 对齐的 标签/值 行。"""
+        text = render.render_event(
+            DeviceEvent(type=EV_PRINT_PAUSED, data={"reason": "耗材用尽（断料）", "percent": 47})
+        )
+        lines = text.splitlines()
+        self.assertEqual(lines[0], "‖ 拓竹 A1 · 打印暂停")
+        self.assertEqual(lines[1], "━" * 20)
+        self.assertIn("原因", lines[2])
+        self.assertIn("耗材用尽（断料）", lines[2])
+        self.assertTrue(lines[-1].startswith("换好料"), "页脚操作提示应在最后")
+
+    def test_glyphs_are_not_emoji_codepoints(self):
+        """字形表里的字符必须都落在非 emoji 区段。"""
+        for event_type, glyph in render.GLYPH.items():
+            code = ord(glyph)
+            self.assertFalse(
+                0x1F000 <= code <= 0x1FAFF,
+                f"{event_type} 的字形 {glyph!r} 落在 emoji 区段",
+            )
+
+    def test_failed_event_shows_hex_error_code(self):
+        text = render.render_event(
+            DeviceEvent(type=EV_PRINT_FAILED, data={"percent": 47, "print_error": 16386})
+        )
+        self.assertIn("0x4002", text)
 
     def test_long_task_name_is_truncated(self):
         long_name = "多功能PCB测试工作台_万向蛇管机械臂_多探针夹具_焊接辅助支架"
@@ -603,14 +637,14 @@ class TestRender(unittest.TestCase):
             DeviceEvent(type=EV_PRINT_FINISHED, data={"task_name": "benchy", "elapsed_min": 42})
         )
         first_line = text.splitlines()[0]
-        self.assertEqual(first_line, "拓竹 A1 · 打印完成")
-        self.assertIn("耗时 42 分钟", text)
+        self.assertEqual(first_line, "✓ 拓竹 A1 · 打印完成")
+        self.assertIn("42 分钟", text)
 
     def test_rule_hit_uses_label_as_headline(self):
         text = render.render_event(
             DeviceEvent(type=EV_RULE_HIT, data={"label": "打印进度到 1% 时提醒", "percent": 1})
         )
-        self.assertEqual(text.splitlines()[0], "拓竹 A1 · 打印进度到 1% 时提醒")
+        self.assertEqual(text.splitlines()[0], "◆ 拓竹 A1 · 打印进度到 1% 时提醒")
         self.assertIn("1%", text)
 
 
