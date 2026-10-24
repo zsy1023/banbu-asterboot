@@ -17,7 +17,7 @@ desc: |
 
   **常用命令**：`/banbu status`、`/banbu remind add layer_reached 50`、`/banbu route list`、
   `/banbu llm off|summary|full`、`/banbu protocol`、`/banbu test-event print_finished`
-version: 0.1.11
+version: 0.1.12
 author: zsy1023
 repo: https://github.com/zsy1023/banbu-asterboot
 astrbot_version: ">=4.9.2"

@@ -24,7 +24,6 @@ try:  # pragma: no cover - 取决于宿主加载方式
     from .bambu_a1.bridge import LlmBridge
     from .bambu_a1.coalescer import Coalescer
     from .bambu_a1.compat import Profile, load_profile
-    from .bambu_a1.logging_compat import bind_plugin_logger
     from .bambu_a1.credentials import (
         CryptoUnavailable,
         CredentialBox,
@@ -49,7 +48,6 @@ except ImportError:  # 宿主把 main.py 当顶层模块加载时
     from bambu_a1.bridge import LlmBridge
     from bambu_a1.coalescer import Coalescer
     from bambu_a1.compat import Profile, load_profile
-    from bambu_a1.logging_compat import bind_plugin_logger
     from bambu_a1.credentials import (
         CryptoUnavailable,
         CredentialBox,
@@ -112,9 +110,6 @@ HELP_TEXT = """拓竹 A1 状态助手
 class BambuA1Plugin(Star):
     def __init__(self, context: Context, config: Any = None):
         super().__init__(context, config)
-        # 先把宿主的插件 logger 交给日志适配层：bambu_a1/* 里所有模块日志都走它，
-        # 避免自己建 astrbot.* logger 导致宿主格式化时缺 plugin_tag 而抛异常。
-        bind_plugin_logger(self.logger)
         self.config: Any = config if isinstance(config, dict) else {}
         self.data_dir = self._resolve_data_dir()
         self.logger.info("数据目录：%s", self.data_dir)

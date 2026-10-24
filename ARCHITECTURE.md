@@ -197,7 +197,6 @@ banbu-asterboot/               ← 仓库根 == 插件包根（AstrBot 只认包
 ├── bambu_a1/                  # 逻辑全部在这里，可脱离 astrbot 单测
 │   ├── models.py              # Snapshot / DeviceEvent / Rule / Account / DeviceAction 数据类
 │   ├── store.py               # 原子写 JSON（tmp+replace）、轮转 jsonl、锁
-│   ├── logging_compat.py      # 日志门面：只用宿主插件 logger，绝不进 astrbot.* 命名空间
 │   ├── about.py               # 读自身 metadata.yaml（版本/仓库），供 /banbu version 自证
 │   ├── compat.py              # 协议档案：端点表 / 字段映射 / 状态映射 / 漂移统计
 │   ├── credentials.py         # AES-256-GCM + 机器绑定盐，密钥派生与掩码
@@ -227,7 +226,7 @@ banbu-asterboot/               ← 仓库根 == 插件包根（AstrBot 只认包
 │   ├── test_core.py           # 事件/规则/路由/合并/渲染/加密/存储/监控集成
 │   ├── test_plugin_smoke.py   # 用 stub 宿主验装配、绑定链路、推送链路
 │   ├── test_packaging.py      # 市场规范合规（元数据/体积/i18n/目录布局/文档链接）
-│   ├── test_logging.py        # 日志兼容层（禁止 astrbot.* 自建 logger、宿主 formatter 复现）
+│   ├── test_logging.py        # 日志合规（AST 禁止 import logging / getLogger，必须用 astrbot.api.logger）
 │   └── stubs/astrbot/         # 最小 AstrBot stub（Star/Context/filter/MessageChain）
 │
 ├── tools/                     # 开发脚本，不随插件包分发
@@ -244,11 +243,21 @@ banbu-asterboot/               ← 仓库根 == 插件包根（AstrBot 只认包
 `main.py` 用"先相对导入、失败再兜底"的两段式导入即可同时兼容两种宿主加载方式。
 协议档案跟着代码走（`bambu_a1/protocol_profiles/`），避免运行期数据目录与可入库资产混在一起。
 
-**日志约束（0.1.2 事故后固化）**：`bambu_a1/*` 里一律 `from .logging_compat import get_logger`，
-禁止 `logging.getLogger("astrbot...")`。宿主 `astrbot` logger 上挂着格式串含 `%(plugin_tag)s` 的
-`LogQueueHandler`，而 `plugin_tag` 只由 `LogManager` 创建 logger 时注入的 `_RecordEnricherFilter` 提供；
-自建同名空间 logger 的记录冒泡上去会直接抛 `ValueError` 把命令打挂。门面另外吞掉日志系统异常，
-保证"日志永远不影响业务"，并在绑定宿主 logger 前回退到 `bambu_a1` logger（不在 `astrbot.*` 下）。
+**日志约束（上架规范 + 0.1.2 事故）**：插件里写日志**只能** `from astrbot.api import logger`，
+宿主 `Star` 基类上的 `self.logger` 就是同一个插件 logger；**禁止 `import logging` / 自建 logger**。
+
+两条理由，一条是规范、一条是事故：
+
+1. 上架审核要求 logger 必须来自 `astrbot.api`，不允许插件用 Python 内置 `logging` 自建。
+2. 实测过代价：`logging.getLogger("astrbot.plugin.bambu_a1.*")` 虽然名字落在宿主的插件命名空间，
+   但不是 `LogManager.get_plugin_logger()` 创建的，缺少 `_RecordEnricherFilter` 注入的 `plugin_tag`；
+   记录冒泡到宿主 `astrbot` logger 上那个格式串含 `%(plugin_tag)s` 的 `LogQueueHandler` 时，
+   `self.format(record)` 直接抛 `ValueError`，一条 INFO 就把 `/banbu bind` 打挂。
+
+`astrbot.api.logger` 是个按**调用方模块**解析的代理（`sys._getframe(1)` → `star_map` 匹配插件包前缀），
+所以 `bambu_a1/auth.py` 这类子模块拿到的仍是本插件的 logger，带正确 `[插件名]` 标签，
+线程池里（`asyncio.to_thread`）调用同样能正确归属。
+`tests/test_logging.py` 用 AST 把规则钉死：插件代码出现 `import logging` 或 `getLogger(` 即失败。
 
 运行期数据（不在插件目录，遵循 AstrBot 规范）：
 
@@ -966,7 +975,7 @@ $env:BAMBU_NO_AUTOPUSH=1     # 单次提交跳过自动推送（例如临时 WIP
 
 ## 18. 实现状态
 
-### 18.1 已实现（本地 199 项测试全绿）
+### 18.1 已实现（本地 197 项测试全绿）
 
 | 里程碑 | 内容 | 验证方式 |
 |---|---|---|
@@ -1014,6 +1023,7 @@ $env:BAMBU_NO_AUTOPUSH=1     # 单次提交跳过自动推送（例如临时 WIP
 | 国际化固定放在 `.astrbot-plugin/i18n/<locale>.json`，含 `metadata` / `config` / `views` 段 | `zh-CN.json` + `en-US.json`，覆盖全部配置项 | `test_i18n_files_in_expected_place`、`test_i18n_config_keys_exist_in_schema` |
 | Logo 建议 1:1、256×256 | `logo.png`：32×32 像素风手绘后最近邻放大 8 倍，`tools/make_logo.py` 可复现/重画 | — |
 | 建议提供 `README`，市场页直接展示 | `README.md` 含安装/绑定/命令/配置/自检 | — |
+| **logger 必须且只能来自 `astrbot.api`，禁止使用内置 `logging`** | 插件代码零 `import logging`；写日志处一律 `from astrbot.api import logger`；原 `bambu_a1/logging_compat.py` 已删除 | `tests/test_logging.py`（AST 扫描 `Import`/`ImportFrom`/`getLogger`） |
 
 ### 19.1 本次按规范做的三处改动
 

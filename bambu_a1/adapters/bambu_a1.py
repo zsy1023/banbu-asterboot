@@ -5,13 +5,12 @@ from __future__ import annotations
 import asyncio
 from typing import Any, AsyncIterator, Callable
 
+from astrbot.api import logger
+
 from .. import mqtt
 from ..compat import Profile
-from ..logging_compat import get_logger
 from ..models import ActionResult, DeviceAction, Snapshot
 from .base import DeviceAdapter, PollSource, PushSource, register_adapter
-
-logger = get_logger("adapter")
 
 
 class _BambuPollSource(PollSource):

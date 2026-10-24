@@ -25,11 +25,10 @@ from __future__ import annotations
 
 from typing import Any, AsyncIterator
 
-from ..logging_compat import get_logger
+from astrbot.api import logger
+
 from ..models import ActionResult, DeviceAction, Snapshot
 from .base import DeviceAdapter, PollSource, PushSource, register_adapter
-
-logger = get_logger("dryer")
 
 NOT_IMPLEMENTED_MSG = "烘干箱适配器尚未实现（二期）：接口与配置位已就绪，逻辑待填"
 

@@ -14,11 +14,10 @@ from typing import Any
 
 import requests
 
+from astrbot.api import logger
+
 from .compat import Profile
 from .credentials import mask_phone
-from .logging_compat import get_logger
-
-logger = get_logger("auth")
 
 BROWSER_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "

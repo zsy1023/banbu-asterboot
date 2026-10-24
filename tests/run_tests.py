@@ -13,7 +13,9 @@ import unittest
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(_HERE)
-for path in (_ROOT, _HERE):
+# stubs 放在最前：插件模块现在按规范 `from astrbot.api import logger`，
+# 单测环境里必须能找到宿主替身。
+for path in (_ROOT, _HERE, os.path.join(_HERE, "stubs")):
     if path not in sys.path:
         sys.path.insert(0, path)
 

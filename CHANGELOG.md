@@ -3,6 +3,28 @@
 本项目的版本号与 `metadata.yaml` 的 `version` 保持一致（语义化版本，不带 `v` 前缀）。
 每个版本对应的 git tag 为 `v<version>`。
 
+## 0.1.12
+
+**上架规范修复：logger 只允许来自 `astrbot.api`，删除自建 logging 回退**
+
+审核意见指出：插件规范要求 logger 必须且只能 `from astrbot.api import logger`，
+严禁使用 Python 内置 `logging` 模块。`bambu_a1/logging_compat.py` 里的
+`logging.getLogger("bambu_a1")` 回退 logger 属于违规，需删除后重新提交。
+
+- 删除 `bambu_a1/logging_compat.py`（连同 `bind_plugin_logger()` 与门面类）
+- `auth.py` / `adapters/bambu_a1.py` / `adapters/dryer_esp32.py` 改为直接
+  `from astrbot.api import logger`；`main.py` 继续用 `Star` 基类给的 `self.logger`（同一个插件 logger）
+- 其余模块本来就不写日志（`monitor`/`push`/`bridge`/`coalescer` 都是注入式 logger），无需改动
+- 说明：`astrbot.api.logger` 是按调用方模块解析的代理（`sys._getframe(1)` → `star_map` 前缀匹配），
+  子模块拿到的仍是本插件 logger，带正确 `[插件名]` 标签；`asyncio.to_thread` 线程里调用同样能正确归属
+- `tests/test_logging.py` 重写为**日志合规**测试（AST 扫描）：
+  - 插件代码不得出现 `import logging` / `from logging import ...`
+  - 不得调用 `getLogger(` / `basicConfig(`
+  - `logging_compat.py` 必须已删除，`main.py` 里不得再有 `bind_plugin_logger`
+  - 三个写日志的模块必须 `from astrbot.api import logger`
+- 测试环境：`tests/run_tests.py` 把 `tests/stubs` 加进 `sys.path`，
+  这样直接 import 插件模块的单测也能拿到宿主 logger 替身
+
 ## 0.1.11
 
 **修复「开始打印 / 打印结束不提醒」+ 事件推送做成可配**
